@@ -13,6 +13,31 @@ export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
+export function validateConsentScopes(scopes, allowedScopes, requiredScopes = ["mcp:read"]) {
+  if (!Array.isArray(scopes) || !Array.isArray(allowedScopes) || !Array.isArray(requiredScopes)) {
+    throw new TypeError("Scope lists must be arrays.");
+  }
+
+  const selected = [...new Set(scopes)];
+  if (selected.some((scope) => typeof scope !== "string" || !allowedScopes.includes(scope))) {
+    throw new CredentialValidationError(
+      "invalid_scope",
+      "One or more selected permissions are not supported.",
+      400,
+    );
+  }
+
+  if (requiredScopes.some((scope) => !selected.includes(scope))) {
+    throw new CredentialValidationError(
+      "required_scope_missing",
+      "Read access (mcp:read) is required to connect SyrianFatora.",
+      400,
+    );
+  }
+
+  return selected;
+}
+
 export async function readUrlEncodedForm(request, maxBytes = 8192) {
   const contentType = (request.headers.get("content-type") || "")
     .split(";")[0]
