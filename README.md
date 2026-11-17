@@ -2,7 +2,7 @@
 
 Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public API, hosted on Cloudflare Workers.
 
-> **Status:** The OAuth authorization Worker scaffold is merged into `main` but is not deployed or enabled in production. The existing production Worker remains on its previously verified `1.1.0` baseline. OAuth resource-server integration and end-to-end validation are still pending.
+> **Status:** The OAuth authorization Worker and OAuth-protected MCP resource-server implementation are merged into `main`. The implementation has unit tests, but Worker bundle/runtime validation and end-to-end OAuth verification are still outstanding. The existing production Worker remains on its previously verified `1.1.0` baseline; the OAuth Workers are preview-only source and are not deployed or enabled in production.
 
 ## Goals
 
@@ -22,7 +22,7 @@ Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public A
 - Production bindings: none were present at the last inspection
 - No verified custom domain; do not assume the endpoint until it is probed.
 
-This repository is a source and development project. A change in GitHub does not deploy or modify the Cloudflare production Worker.
+The OAuth authorization and resource-server packages under `apps/auth` and `apps/mcp` are source-only preview implementations. A change in GitHub does not deploy or modify the Cloudflare production Worker.
 
 ## Security rules
 
@@ -46,8 +46,10 @@ This repository is a source and development project. A change in GitHub does not
 
 - Keep changes focused and document behavior, security assumptions, and testing.
 - Run the tests relevant to the changed component before opening a pull request.
-- Authorization-worker source and unit tests live in `apps/auth`. Run `cd apps/auth && npm test`.
-- The OAuth Provider integration tests and MCP resource-server integration are not complete yet.
+- Authorization-worker unit tests: `cd apps/auth && npm test`.
+- MCP resource-worker unit tests: `cd apps/mcp && npm test`.
+- The Wrangler dry-run bundle check is being added through a separate CI pull request; it does not deploy the Worker.
+- OAuth provider integration tests, Service Binding validation, and a complete end-to-end authorization flow remain outstanding.
 - Never use a production workspace for write-operation tests.
 
 ## License
