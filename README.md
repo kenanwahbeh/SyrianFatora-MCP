@@ -2,7 +2,7 @@
 
 Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public API, hosted on Cloudflare Workers.
 
-> **Status:** OAuth authorization Worker implementation is in progress on [draft PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1). The production Worker remains on its previously deployed `1.1.0` implementation. Nothing in this branch is deployed or enabled in production.
+> **Status:** The OAuth authorization Worker scaffold is merged into `main` but is not deployed or enabled in production. The existing production Worker remains on its previously verified `1.1.0` baseline. OAuth resource-server integration and end-to-end validation are still pending.
 
 ## Goals
 
@@ -46,7 +46,8 @@ This repository is a source and development project. A change in GitHub does not
 
 - Keep changes focused and document behavior, security assumptions, and testing.
 - Run the tests relevant to the changed component before opening a pull request.
-- The OAuth authorization-worker unit tests currently live on [draft PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1), not on `main`. On a checkout that contains `apps/auth`, run `cd apps/auth && npm test`.
+- Authorization-worker source and unit tests live in `apps/auth`. Run `cd apps/auth && npm test`.
+- The OAuth Provider integration tests and MCP resource-server integration are not complete yet.
 - Never use a production workspace for write-operation tests.
 
 ## License

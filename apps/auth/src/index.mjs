@@ -6,6 +6,7 @@ import { WorkerEntrypoint, env } from "cloudflare:workers";
 import {
   CredentialValidationError,
   escapeHtml,
+  validateConsentScopes,
   validateSyrianFatoraKey,
   readUrlEncodedForm,
 } from "./security.mjs";
@@ -115,19 +116,19 @@ async function authorize(request, workerEnv) {
     return new Response(null, { status: 302, headers });
   }
 
-  const approved = await oauth.approveConsent(request, handle, {
-    scope: form.getAll("scope").map(String),
-  });
-
+  // Validate the user's selection and upstream credential before consuming the
+  // one-time, browser-bound consent handle. A retry can then correct a bad key
+  // or scope selection without restarting the entire OAuth request.
+  const selectedScopes = validateConsentScopes(
+    form.getAll("scope").map(String),
+    SUPPORTED_SCOPES,
+  );
   const apiKey = String(form.get("api_key") ?? "").trim();
   await validateSyrianFatoraKey(apiKey);
 
-  if (!approved.request.scope.includes("mcp:read")) {
-    return new Response("The mcp:read scope is required.", {
-      status: 400,
-      headers: securityHeaders(new Headers({ "Content-Type": "text/plain; charset=utf-8" })),
-    });
-  }
+  const approved = await oauth.approveConsent(request, handle, {
+    scope: selectedScopes,
+  });
 
   // The provider encrypts props at rest and returns them only to the resource server.
   // This random subject identifies this grant; it is not an upstream account identifier.

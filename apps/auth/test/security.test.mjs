@@ -4,6 +4,7 @@ import {
   CredentialValidationError,
   escapeHtml,
   SYRIANFATORA_API_BASE,
+  validateConsentScopes,
   validateSyrianFatoraKey,
   readUrlEncodedForm,
 } from "../src/security.mjs";
@@ -11,6 +12,27 @@ import {
 test("escapeHtml encodes all HTML-sensitive characters", () => {
   assert.equal(escapeHtml(`<script a="b">Tom & 'Jerry'</script>`),
     "&#60;script a=&#34;b&#34;&#62;Tom &#38; &#39;Jerry&#39;&#60;/script&#62;");
+});
+
+test("accepts only supported consent scopes and preserves the required read scope", () => {
+  assert.deepEqual(
+    validateConsentScopes(["mcp:read", "mcp:write", "mcp:read"], ["mcp:read", "mcp:write", "offline_access"]),
+    ["mcp:read", "mcp:write"],
+  );
+});
+
+test("rejects unsupported consent scopes", () => {
+  assert.throws(
+    () => validateConsentScopes(["mcp:read", "admin"], ["mcp:read", "mcp:write", "offline_access"]),
+    (error) => error instanceof CredentialValidationError && error.code === "invalid_scope",
+  );
+});
+
+test("rejects consent without the required read scope", () => {
+  assert.throws(
+    () => validateConsentScopes(["mcp:write"], ["mcp:read", "mcp:write", "offline_access"]),
+    (error) => error instanceof CredentialValidationError && error.code === "required_scope_missing",
+  );
 });
 
 test("validates the key using a read-only customers request", async () => {
