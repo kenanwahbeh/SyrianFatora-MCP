@@ -4,36 +4,38 @@
 
 - [x] Create private GitHub repository.
 - [x] Record current production baseline and security constraints.
-- [ ] Retrieve and preserve the exact deployed Worker source in version control.
+- [x] Archive the exact deployed Worker v1.1.0 source as `src/worker-v1.1.0.mjs`.
 - [ ] Confirm the public MCP endpoint with direct HTTP probes.
 
-## Phase 1 — OAuth design and compatibility
+## Phase 1 — OAuth architecture and compatibility
 
-- [ ] Verify the current `workers-oauth-provider` package API and Cloudflare compatibility.
-- [ ] Confirm ChatGPT remote MCP OAuth discovery requirements and supported registration behavior.
-- [ ] Define issuer, authorization, token, revocation, and protected-resource metadata URLs.
-- [ ] Define client registration policy and redirect URI allow-listing.
+- [x] Verify Cloudflare's current Workers OAuth Provider v1 split architecture.
+- [x] Select separate authorization and resource-server roles.
+- [ ] Confirm ChatGPT remote MCP OAuth discovery and client registration behavior against current requirements.
+- [ ] Define issuer, authorization, token, revocation, protected-resource metadata, and service-binding names.
 - [ ] Define scopes and the relationship between MCP tool permissions and SyrianFatora resource permissions.
+- [ ] Verify the provider's encrypted `props` contract and persistence boundaries.
 
-**Acceptance:** written protocol contract; no production changes; security review of redirect, PKCE, CSRF, token audience, and tenant isolation.
+**Acceptance:** written protocol contract; no production changes; security review of redirect, PKCE, CSRF, token audience, storage, and tenant isolation.
 
-## Phase 2 — Credential onboarding and storage
+## Phase 2 — Authorization Worker
 
-- [ ] Implement a first-party HTTPS authorization page.
-- [ ] Validate a supplied SyrianFatora key using a read-only endpoint.
-- [ ] Select and implement encrypted server-side credential storage.
-- [ ] Bind each credential to the correct OAuth subject/grant.
+- [ ] Add `apps/auth` Worker using `OAuthAuthorizationServer` v1.
+- [ ] Implement first-party HTTPS authorization, key-entry, and consent pages.
+- [ ] Validate supplied SyrianFatora keys with a harmless read-only endpoint.
+- [ ] Implement secure credential persistence and grant association.
 - [ ] Implement disconnect, revocation, and credential deletion.
+- [ ] Add tests for redirect URI validation, state, PKCE S256, issuer, audience, and tenant isolation.
 
 **Acceptance:** test keys only; no upstream key in client-visible responses, browser storage, logs, or package files; cross-tenant tests pass.
 
-## Phase 3 — MCP authorization integration
+## Phase 3 — MCP Resource Worker
 
-- [ ] Protect the MCP endpoint with OAuth access tokens.
-- [ ] Resolve the upstream key server-side for every request.
-- [ ] Preserve the existing 51-tool catalogue and resource behavior.
+- [ ] Add `OAuthResourceServer` v1 to `apps/mcp` and preserve the existing tool catalogue.
+- [ ] Validate tokens through an auth Worker Service Binding.
+- [ ] Resolve the upstream key from trusted grant properties/server-side storage.
 - [ ] Map upstream 401/403/404/409/422/429 responses safely.
-- [ ] Verify protocol discovery and token refresh/revocation behavior.
+- [ ] Verify protocol initialization, tool listing, token expiry, and revocation.
 
 **Acceptance:** `initialize` and `tools/list` succeed with OAuth; unauthorized requests fail closed; safe read-only tools work with a test workspace.
 
@@ -41,23 +43,25 @@
 
 - [ ] Update the existing SyrianFatora plugin, not create a duplicate.
 - [ ] Add only the verified MCP endpoint and supported OAuth metadata/configuration.
-- [ ] Remove any legacy static Bearer-token instructions that conflict with OAuth.
-- [ ] Verify the connection flow from ChatGPT.
+- [ ] Remove legacy static Bearer-token instructions.
+- [ ] Verify the authorization flow from ChatGPT.
 
 **Acceptance:** user can authorize without pasting the upstream API key into chat or plugin configuration.
 
 ## Phase 5 — Release and production rollout
 
 - [ ] Run unit, integration, security, and MCP protocol tests.
-- [ ] Review deployment diff and storage migrations.
-- [ ] Obtain explicit approval for production bindings and deployment.
-- [ ] Deploy, verify health and read-only MCP operations, and document rollback.
+- [ ] Review deployment diff, bindings, storage migrations, and rollback.
+- [ ] Obtain explicit approval for production bindings and deployments.
+- [ ] Deploy auth Worker and migrate the MCP Worker in a controlled sequence.
+- [ ] Verify health, OAuth discovery, and read-only MCP smoke tests.
 
-**Acceptance:** production deployment ID, health probe, OAuth discovery probe, and read-only MCP smoke test are recorded. No write operation is used for smoke testing.
+**Acceptance:** production deployment IDs, health probe, OAuth discovery probe, and read-only MCP smoke test are recorded. No write operation is used for smoke testing.
 
 ## Open decisions
 
-- Cloudflare storage choice and encryption model.
-- OAuth client registration strategy supported by the current ChatGPT MCP client.
-- Final verified MCP URL/custom domain.
+- Durable credential storage and encryption model.
+- ChatGPT client metadata discovery vs dynamic client registration compatibility.
+- Final verified MCP and authorization URLs/custom domains.
+- Exact OAuth scopes and write-operation step-up strategy.
 - Whether refresh tokens are required by the supported client flow.

@@ -1,34 +1,43 @@
 # Architecture
 
+## Decision: split authorization and resource servers
+
+Use the current v1 API of `@cloudflare/workers-oauth-provider`. Its October 2026 design separates the authorization server from the MCP resource server. Keep the existing `syrianfatora-mcp` Worker as the resource server after a tested migration, and create a separate `syrianfatora-auth` Worker for user onboarding, OAuth authorization, token issuance, and credential lifecycle.
+
+The two Workers communicate through a Cloudflare Service Binding. The MCP Worker validates access tokens with the authorization Worker over that binding; token validation does not traverse the public Internet.
+
 ## Intended request flow
 
-1. The user opens the MCP connection setup flow and is redirected to the Worker authorization endpoint.
-2. The authorization server authenticates the user and collects a SyrianFatora API key through a TLS-protected first-party page.
-3. The server validates the supplied key against a safe read-only SyrianFatora endpoint before saving it.
-4. The user approves the requested access. Authorization Code + PKCE (`S256`) binds the authorization response to the initiating client.
-5. The token endpoint exchanges the one-time authorization code for an MCP access token (and refresh token only if required by the chosen client flow).
-6. MCP requests present the OAuth token. The Worker resolves the grant server-side, retrieves the associated upstream key, and calls `https://syrianfatora.com/api/public/v1`.
-7. The upstream key is added only to the server-to-server `Authorization: Bearer` header and is never returned to the MCP client.
+1. The MCP client requests the protected-resource metadata for the MCP endpoint and discovers the authorization server.
+2. The user is redirected to the authorization Worker.
+3. The authorization Worker validates the OAuth request, client, redirect URI, resource audience, state, and PKCE challenge.
+4. A first-party HTTPS onboarding page asks the user for the SyrianFatora API key and explains the requested access.
+5. The auth Worker validates the key using a harmless read-only SyrianFatora API call. It then securely associates the credential with the authenticated subject and grant.
+6. The consent page displays the MCP client name, requested scopes, and token destination hostname. The user explicitly approves.
+7. Workers OAuth Provider completes the Authorization Code + PKCE flow and issues a token scoped to the MCP resource.
+8. The MCP Worker validates the token using the auth Worker Service Binding and receives trusted, encrypted grant properties.
+9. The MCP Worker resolves the corresponding SyrianFatora credential server-side and calls `https://syrianfatora.com/api/public/v1` with the upstream Bearer header.
+10. The upstream key is never returned to the MCP client.
 
 ## Components
 
-- **Cloudflare Worker:** MCP transport, OAuth endpoints, authorization UI, upstream API adapter.
-- **OAuth provider library:** Prefer Cloudflare's maintained `workers-oauth-provider` package, after verifying current API and compatibility.
-- **Credential/grant storage:** Select a Cloudflare storage product based on required atomicity, encryption and lifecycle semantics. Do not store plaintext credentials in ordinary KV without an explicit threat-model decision.
-- **SyrianFatora REST API:** `https://syrianfatora.com/api/public/v1`.
-- **ChatGPT plugin package:** Contains only the verified MCP URL and supported OAuth connection metadata; no user-specific secrets.
+- **`syrianfatora-auth` Worker:** OAuth authorization server, consent/onboarding UI, client registration/discovery, credential lifecycle.
+- **`syrianfatora-mcp` Worker:** MCP resource server, existing 51-tool catalogue, upstream SyrianFatora API adapter, OAuth token validation through Service Binding.
+- **Workers OAuth Provider v1:** `OAuthAuthorizationServer` and `OAuthResourceServer` from `@cloudflare/workers-oauth-provider`.
+- **Credential store:** choose storage after confirming the v1 provider's encrypted `props` lifecycle and the requirements for durable per-user upstream credentials. Do not store plaintext credentials in ordinary KV without an explicit threat-model decision.
+- **ChatGPT plugin package:** contains only the verified MCP URL and supported OAuth connection metadata; no user-specific secrets.
 
 ## Identity and tenancy
 
-Every authorization grant must map to exactly one SyrianFatora credential/workspace. Never infer workspace identity from user-supplied labels. Enforce tenant separation in every upstream request and storage lookup.
+Every authorization grant must map to exactly one SyrianFatora credential/workspace. Use an immutable server-side subject/grant identifier. Never trust user-supplied workspace labels as identity. Enforce tenant separation on every storage lookup and upstream request.
 
 ## MCP compatibility
 
-Preserve the existing tool catalogue and supported protocol versions where compatible with the authenticated MCP transport. Test `initialize`, `tools/list`, and a harmless read-only tool before enabling writes.
+Keep the existing tool catalogue and API behavior. Align protocol support with the version negotiated by the current MCP client and Workers OAuth Provider v1. Test initialization, tool listing, and harmless read-only calls before enabling writes.
 
 ## Non-goals for the first release
 
 - Webhooks
 - Multi-workspace switching within one grant
 - Administrative access to Cloudflare
-- Any direct database access to SyrianFatora
+- Direct database access to SyrianFatora
