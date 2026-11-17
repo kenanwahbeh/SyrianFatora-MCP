@@ -150,7 +150,7 @@ async function authorize(request, workerEnv) {
   return new Response(null, { status: 302, headers });
 }
 
-export default class SyrianFatoraAuth extends WorkerEntrypoint {
+export class SyrianFatoraAuth extends WorkerEntrypoint {
   async fetch(request) {
     const url = new URL(request.url);
 
@@ -203,3 +203,6 @@ export default class SyrianFatoraAuth extends WorkerEntrypoint {
     return authorizationServer.validateToken(resource, token, this.env);
   }
 }
+
+
+export default SyrianFatoraAuth;
