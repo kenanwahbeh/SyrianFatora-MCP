@@ -7,6 +7,7 @@ import {
   CredentialValidationError,
   escapeHtml,
   validateSyrianFatoraKey,
+  readUrlEncodedForm,
 } from "./security.mjs";
 
 const SUPPORTED_SCOPES = ["mcp:read", "mcp:write", "offline_access"];
@@ -105,15 +106,7 @@ async function authorize(request, workerEnv) {
     });
   }
 
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 8192) {
-    return new Response("Request Too Large", {
-      status: 413,
-      headers: securityHeaders(),
-    });
-  }
-
-  const form = await request.formData();
+  const form = await readUrlEncodedForm(request);
   const handle = String(form.get("handle") ?? "");
 
   if (form.get("decision") !== "approve") {
