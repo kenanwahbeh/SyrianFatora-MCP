@@ -13,6 +13,61 @@ export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
+export async function readUrlEncodedForm(request, maxBytes = 8192) {
+  const contentType = (request.headers.get("content-type") || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  if (contentType !== "application/x-www-form-urlencoded") {
+    throw new CredentialValidationError(
+      "invalid_form",
+      "The authorization form format is not supported.",
+      415,
+    );
+  }
+
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) {
+    throw new CredentialValidationError(
+      "request_too_large",
+      "The authorization form is too large.",
+      413,
+    );
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) return new URLSearchParams();
+
+  const chunks = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      throw new CredentialValidationError(
+        "request_too_large",
+        "The authorization form is too large.",
+        413,
+      );
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new URLSearchParams(new TextDecoder().decode(body));
+}
+
 /**
  * Validate a workspace API key using a harmless, read-only endpoint.
  * The key is never included in a URL, response body, or thrown error.
