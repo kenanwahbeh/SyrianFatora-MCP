@@ -15,7 +15,7 @@ This package is the OAuth-protected resource server for the existing SyrianFator
 
 ## Runtime configuration
 
-The example wrangler.jsonc is deliberately a preview-only template:
+The `cloudflare.config.ts` file is deliberately a preview-only template:
 
 - Worker name: syrianfatora-mcp-oauth-preview (not the existing production service).
 - MCP_SERVER_URL must be replaced with the exact public HTTPS URL including /mcp.
@@ -24,9 +24,9 @@ The example wrangler.jsonc is deliberately a preview-only template:
 
 Do not deploy this template while its .invalid placeholder URLs remain. Do not rename the preview Worker to syrianfatora-mcp or point it at production until a separate migration review and explicit approval.
 
-## Tests
+## Build and tests
 
-Run npm test from this directory. Unit tests use a fake upstream fetch; they do not call SyrianFatora or require a real API key.
+This package uses the Cloudflare `cf` CLI with the Cloudflare Vite plugin v2. Run `npm run build:check` to validate the Worker build without deploying, and `npm test` to run unit tests. Unit tests use a fake upstream fetch; they do not call SyrianFatora or require a real API key.
 
 ## Scope enforcement
 
