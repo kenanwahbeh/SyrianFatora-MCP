@@ -2,7 +2,7 @@
 
 ## Phase 0 — Baseline and source control
 
-- [x] Create private GitHub repository.
+- [x] Create GitHub repository.
 - [x] Record current production baseline and security constraints.
 - [x] Archive the exact deployed Worker v1.1.0 source as `src/worker-v1.1.0.mjs`.
 - [ ] Confirm the public MCP endpoint with direct HTTP probes.
@@ -31,7 +31,7 @@
 - [x] Require `customers.read` for the validation probe.
 - [x] Pass the upstream API key only in provider-encrypted authorization `props`.
 - [x] Add safe response headers and avoid logging credentials or request bodies.
-- [x] Add unit tests for HTML escaping and upstream key validation outcomes.
+- [x] Add unit tests for HTML escaping, bounded form parsing, upstream key validation, and consent-scope validation.
 - [ ] Add local integration tests against the pinned OAuth Provider package.
 - [ ] Implement credential replacement and disconnect/revocation UX.
 - [ ] Configure the production KV namespace and Worker secrets/bindings only after review.
