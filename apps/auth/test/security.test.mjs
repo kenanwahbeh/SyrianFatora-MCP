@@ -5,6 +5,7 @@ import {
   escapeHtml,
   SYRIANFATORA_API_BASE,
   validateSyrianFatoraKey,
+  readUrlEncodedForm,
 } from "../src/security.mjs";
 
 test("escapeHtml encodes all HTML-sensitive characters", () => {
@@ -60,4 +61,40 @@ test("rejects malformed keys before making a network request", async () => {
     (error) => error.code === "invalid_format",
   );
   assert.equal(called, false);
+});
+
+test("parses only bounded URL-encoded authorization forms", async () => {
+  const request = new Request("https://auth.example.test/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "handle=one-time&decision=approve&scope=mcp%3Aread",
+  });
+  const form = await readUrlEncodedForm(request);
+  assert.equal(form.get("handle"), "one-time");
+  assert.equal(form.get("decision"), "approve");
+  assert.deepEqual(form.getAll("scope"), ["mcp:read"]);
+});
+
+test("rejects unsupported form encodings", async () => {
+  const request = new Request("https://auth.example.test/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "multipart/form-data; boundary=test" },
+    body: "--test--",
+  });
+  await assert.rejects(
+    () => readUrlEncodedForm(request),
+    (error) => error.code === "invalid_form" && error.status === 415,
+  );
+});
+
+test("rejects oversized form bodies while streaming", async () => {
+  const request = new Request("https://auth.example.test/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "x=".concat("a".repeat(100)),
+  });
+  await assert.rejects(
+    () => readUrlEncodedForm(request, 32),
+    (error) => error.code === "request_too_large" && error.status === 413,
+  );
 });
