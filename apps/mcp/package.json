@@ -1,0 +1,13 @@
+{
+  "name": "@syrianfatora/mcp-resource-worker",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "OAuth-protected MCP resource server for SyrianFatora",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4"
+  }
+}
