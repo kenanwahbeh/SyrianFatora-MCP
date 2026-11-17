@@ -122,7 +122,10 @@ async function authorize(request, workerEnv) {
   await validateSyrianFatoraKey(apiKey);
 
   if (!approved.request.scope.includes("mcp:read")) {
-    throw new AuthorizationError("invalid_scope", "The mcp:read scope is required.");
+    return new Response("The mcp:read scope is required.", {
+      status: 400,
+      headers: securityHeaders(new Headers({ "Content-Type": "text/plain; charset=utf-8" })),
+    });
   }
 
   // The provider encrypts props at rest and returns them only to the resource server.
