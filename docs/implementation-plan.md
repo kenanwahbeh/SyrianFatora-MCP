@@ -40,14 +40,18 @@
 
 ## Phase 3 — MCP Resource Worker
 
-- [ ] Add `OAuthResourceServer` v1 to a new MCP source entrypoint and preserve the existing tool catalogue.
-- [ ] Validate tokens through an auth Worker Service Binding.
-- [ ] Read the upstream key from trusted encrypted grant props.
-- [ ] Enforce `mcp:read` and `mcp:write` at tool execution boundaries.
-- [ ] Map upstream 401/403/404/409/422/429 responses safely.
-- [ ] Verify protocol initialization, tool listing, token expiry, and revocation.
+- [x] Add `OAuthResourceServer` v1 wrapper in `apps/mcp`.
+- [x] Validate tokens through the auth Worker Service Binding contract.
+- [x] Read the upstream key only from validated encrypted grant props.
+- [x] Preserve all 51 existing MCP tool definitions and request mappings.
+- [x] Enforce `mcp:read` for MCP access and `mcp:write` for create/update/delete tool calls.
+- [x] Keep the payment-void reason requirement and bound request size.
+- [x] Add tests for tool catalogue parity, scope enforcement, key isolation/redaction, and request validation.
+- [ ] Run the Worker package build/runtime tests with the pinned provider package.
+- [ ] Verify protected-resource metadata, invalid/expired tokens, and Service Binding token validation end-to-end.
+- [ ] Verify safe read-only upstream calls using a dedicated test workspace.
 
-**Acceptance:** `initialize` and `tools/list` succeed with OAuth; unauthorized requests fail closed; safe read-only tools work with a test workspace.
+**Acceptance:** `initialize` and `tools/list` succeed with OAuth; unauthorized requests fail closed; writes require `mcp:write`; safe read-only tools work with a test workspace.
 
 ## Phase 4 — Plugin package
 
