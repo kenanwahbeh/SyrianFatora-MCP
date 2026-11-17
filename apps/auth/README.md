@@ -11,6 +11,7 @@ This Worker is the OAuth 2.1 authorization server for the SyrianFatora MCP resou
 - Collects the SyrianFatora workspace API key only over the HTTPS form POST.
 - Validates the key with the read-only `GET /customers?per_page=1` endpoint.
 - Requires the upstream key to have `customers.read` permission and API access enabled.
+- Uses possession of the workspace API key as the initial proof of workspace access; it does not claim to authenticate a person's legal identity.
 - Passes the upstream key only in the provider's encrypted `props`; it is never returned to the MCP client.
 - Exposes a minimal `/health` endpoint.
 
