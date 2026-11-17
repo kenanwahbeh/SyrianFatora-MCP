@@ -1,0 +1,200 @@
+import {
+  AuthorizationError,
+  OAuthAuthorizationServer,
+} from "@cloudflare/workers-oauth-provider";
+import { WorkerEntrypoint, env } from "cloudflare:workers";
+import {
+  CredentialValidationError,
+  escapeHtml,
+  validateSyrianFatoraKey,
+} from "./security.mjs";
+
+const SUPPORTED_SCOPES = ["mcp:read", "mcp:write", "offline_access"];
+
+const authorizationServer = new OAuthAuthorizationServer({
+  issuer: env.ISSUER,
+  resources: [env.MCP_SERVER_URL],
+  scopesSupported: SUPPORTED_SCOPES,
+  clientIdMetadataDocumentEnabled: true,
+  clientRegistrationEndpoint: "/oauth/register",
+});
+
+function securityHeaders(headers = new Headers()) {
+  headers.set("Cache-Control", "no-store");
+  headers.set("Pragma", "no-cache");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  );
+  return headers;
+}
+
+function errorPage(message) {
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SyrianFatora connection</title></head>
+<body>
+  <main>
+    <h1>Could not connect SyrianFatora</h1>
+    <p>${escapeHtml(message)}</p>
+    <p>Return to ChatGPT and start the connection again. Your API key was not saved by this page.</p>
+  </main>
+</body>
+</html>`;
+}
+
+function authorizationPage(details, handle) {
+  const clientName = escapeHtml(details.clientName);
+  const clientDomain = details.clientDomain
+    ? `Published by <strong>${escapeHtml(details.clientDomain)}</strong>.`
+    : "This app registered itself; its publisher domain is not verified.";
+  const scopes = details.scope
+    .map((scope) => `<label><input type="checkbox" name="scope" value="${escapeHtml(scope)}" checked> ${escapeHtml(scope)}</label>`)
+    .join("<br>");
+  const localWarning = details.redirectIsLoopback
+    ? "<p><strong>This sends access to an app on your computer.</strong> Continue only if you just started signing in from it.</p>"
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Connect SyrianFatora — ${clientName}</title>
+</head>
+<body>
+  <main>
+    <h1>Connect your SyrianFatora workspace</h1>
+    <p>Client: <strong>${clientName}</strong>. ${clientDomain}</p>
+    <p>OAuth access will be sent to <strong>${escapeHtml(details.redirectHost)}</strong>.</p>
+    ${localWarning}
+    <h2>SyrianFatora API key</h2>
+    <p>Paste your workspace API key. It is checked using a read-only request and kept server-side. It is never sent to ChatGPT.</p>
+    <form method="post" action="/authorize">
+      <input type="hidden" name="handle" value="${escapeHtml(handle)}">
+      <label for="api_key">Workspace API key</label>
+      <input id="api_key" name="api_key" type="password" required minlength="20" maxlength="512" autocomplete="off" spellcheck="false" autocapitalize="none">
+      <h2>Requested permissions</h2>
+      ${scopes}
+      <p><button type="submit" name="decision" value="approve">Connect and allow</button>
+      <button type="submit" name="decision" value="deny">Deny</button></p>
+    </form>
+  </main>
+</body>
+</html>`;
+}
+
+async function authorize(request, workerEnv) {
+  const oauth = authorizationServer.getOAuthApi(workerEnv);
+
+  if (request.method === "GET") {
+    const authRequest = await oauth.parseAuthRequest(request);
+    const details = await oauth.describeConsent(authRequest);
+    const consent = await oauth.beginConsent(authRequest);
+    const headers = securityHeaders(consent.headers);
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    return new Response(authorizationPage(details, consent.handle), { headers });
+  }
+
+  if (request.method !== "POST") {
+    return new Response("Method Not Allowed", {
+      status: 405,
+      headers: securityHeaders(new Headers({ Allow: "GET, POST" })),
+    });
+  }
+
+  const form = await request.formData();
+  const handle = String(form.get("handle") ?? "");
+
+  if (form.get("decision") !== "approve") {
+    const denied = await oauth.denyConsent(request, handle);
+    const headers = securityHeaders(denied.headers);
+    return new Response(null, { status: 302, headers });
+  }
+
+  const approved = await oauth.approveConsent(request, handle, {
+    scope: form.getAll("scope").map(String),
+  });
+
+  const apiKey = String(form.get("api_key") ?? "").trim();
+  await validateSyrianFatoraKey(apiKey);
+
+  if (!approved.request.scope.includes("mcp:read")) {
+    throw new AuthorizationError("invalid_scope", "The mcp:read scope is required.");
+  }
+
+  // The provider encrypts props at rest and returns them only to the resource server.
+  // This random subject identifies this grant; it is not an upstream account identifier.
+  const grantSubject = crypto.randomUUID();
+  const { redirectTo } = await oauth.completeAuthorization({
+    request: approved.request,
+    userId: grantSubject,
+    metadata: {},
+    scope: approved.request.scope,
+    props: {
+      grantSubject,
+      provider: "syrianfatora",
+      upstreamApiKey: apiKey,
+    },
+  });
+
+  const headers = securityHeaders(approved.headers);
+  headers.set("Location", redirectTo);
+  return new Response(null, { status: 302, headers });
+}
+
+export default class SyrianFatoraAuth extends WorkerEntrypoint {
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/health") {
+      return Response.json(
+        { ok: true, service: "syrianfatora-auth", version: "0.1.0" },
+        { headers: securityHeaders() },
+      );
+    }
+
+    if (url.pathname !== "/authorize") {
+      return authorizationServer.fetch(request, this.env, this.ctx);
+    }
+
+    try {
+      return await authorize(request, this.env);
+    } catch (error) {
+      if (error instanceof AuthorizationError && error.redirectTo) {
+        return Response.redirect(error.redirectTo, 302);
+      }
+
+      if (error instanceof AuthorizationError) {
+        return new Response(escapeHtml(error.description), {
+          status: 400,
+          headers: securityHeaders(new Headers({
+            "Content-Type": "text/plain; charset=utf-8",
+          })),
+        });
+      }
+
+      if (error instanceof CredentialValidationError) {
+        return new Response(errorPage(error.message), {
+          status: error.status,
+          headers: securityHeaders(new Headers({
+            "Content-Type": "text/html; charset=utf-8",
+          })),
+        });
+      }
+
+      // Do not log request bodies, Authorization headers, or exception objects:
+      // they may contain credentials in future integrations.
+      return new Response("Internal Server Error", {
+        status: 500,
+        headers: securityHeaders(),
+      });
+    }
+  }
+
+  validateToken(resource, token) {
+    return authorizationServer.validateToken(resource, token, this.env);
+  }
+}
