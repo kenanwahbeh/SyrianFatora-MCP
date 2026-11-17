@@ -79,7 +79,7 @@ function authorizationPage(details, handle) {
       <h2>Requested permissions</h2>
       ${scopes}
       <p><button type="submit" name="decision" value="approve">Connect and allow</button>
-      <button type="submit" name="decision" value="deny">Deny</button></p>
+      <button type="submit" name="decision" value="deny" formnovalidate>Deny</button></p>
     </form>
   </main>
 </body>
@@ -102,6 +102,14 @@ async function authorize(request, workerEnv) {
     return new Response("Method Not Allowed", {
       status: 405,
       headers: securityHeaders(new Headers({ Allow: "GET, POST" })),
+    });
+  }
+
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 8192) {
+    return new Response("Request Too Large", {
+      status: 413,
+      headers: securityHeaders(),
     });
   }
 
