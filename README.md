@@ -2,7 +2,7 @@
 
 Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public API, hosted on Cloudflare Workers.
 
-> **Status:** The OAuth authorization Worker and OAuth-protected MCP resource-server implementation are merged into `main`. The implementation has unit tests, but Worker bundle/runtime validation and end-to-end OAuth verification are still outstanding. The existing production Worker remains on its previously verified `1.1.0` baseline; the OAuth Workers are preview-only source and are not deployed or enabled in production.
+> **Status:** The OAuth authorization Worker and OAuth-protected MCP resource-server implementation are merged into `main`. Both Workers now build successfully with the Cloudflare `cf build` workflow and have passing unit tests. Local Worker-runtime integration and end-to-end OAuth verification are still outstanding. The existing production Worker remains on its previously verified `1.1.0` baseline; the OAuth Workers are preview-only source and are not deployed or enabled in production.
 
 ## Goals
 
@@ -48,7 +48,8 @@ The OAuth authorization and resource-server packages under `apps/auth` and `apps
 - Run the tests relevant to the changed component before opening a pull request.
 - Authorization-worker unit tests: `cd apps/auth && npm test`.
 - MCP resource-worker unit tests: `cd apps/mcp && npm test`.
-- The Wrangler dry-run bundle check is being added through a separate CI pull request; it does not deploy the Worker.
+- Both Worker packages use the Cloudflare `cf` CLI and Cloudflare Vite plugin v2; `npm run build:check` runs `cf build` and does not deploy.
+- CI installs locked dependencies, builds both Workers with `cf build`, and runs their unit tests.
 - OAuth provider integration tests, Service Binding validation, and a complete end-to-end authorization flow remain outstanding.
 - Never use a production workspace for write-operation tests.
 

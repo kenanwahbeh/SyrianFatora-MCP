@@ -27,13 +27,9 @@ The Worker needs:
 
 For Client ID Metadata Documents, the Cloudflare Worker compatibility flags must include `global_fetch_strictly_public`; the current Cloudflare authorization guide also uses `nodejs_compat`. Set a current compatibility date. Do not deploy until the actual issuer and MCP URLs are verified.
 
-## Local tests
+## Build and local tests
 
-From this directory:
-
-```sh
-npm test
-```
+This package uses the Cloudflare `cf` CLI with the Cloudflare Vite plugin v2. From this directory, run `npm run build:check` to validate the Worker build without deploying, and `npm test` to run unit tests.
 
 The current tests use Node's built-in test runner and do not require a live SyrianFatora key.
 
