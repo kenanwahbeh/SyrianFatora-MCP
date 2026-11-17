@@ -12,6 +12,6 @@
     "@cloudflare/workers-oauth-provider": "1.2.4"
   },
   "devDependencies": {
-    "wrangler": "4.115.0"
+    "wrangler": "4.164.0"
   }
 }
