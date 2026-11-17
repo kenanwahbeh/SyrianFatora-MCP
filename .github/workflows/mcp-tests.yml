@@ -1,0 +1,30 @@
+name: MCP Resource Worker tests
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-unit-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mcp
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Run MCP resource-worker tests
+        run: npm test
