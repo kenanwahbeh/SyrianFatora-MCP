@@ -11,29 +11,39 @@
 
 - [x] Verify Cloudflare's current Workers OAuth Provider v1 split architecture.
 - [x] Select separate authorization and resource-server roles.
-- [ ] Confirm ChatGPT remote MCP OAuth discovery and client registration behavior against current requirements.
-- [ ] Define issuer, authorization, token, revocation, protected-resource metadata, and service-binding names.
-- [ ] Define scopes and the relationship between MCP tool permissions and SyrianFatora resource permissions.
-- [ ] Verify the provider's encrypted `props` contract and persistence boundaries.
+- [x] Pin Workers OAuth Provider v1 dependency to 1.2.4.
+- [x] Confirm the current authorization and consent helper APIs against Cloudflare documentation.
+- [x] Confirm Client ID Metadata Documents and legacy Dynamic Client Registration support.
+- [x] Define OAuth scopes: `mcp:read`, `mcp:write`, and optional `offline_access`.
+- [x] Define `ISSUER`, `MCP_SERVER_URL`, and `OAUTH_KV` runtime configuration contract.
+- [x] Choose encrypted OAuth provider `props` for the per-grant upstream API key; do not create a separate plaintext credential store.
+- [ ] Confirm the exact public MCP endpoint and authorization origin.
+- [ ] Verify ChatGPT remote MCP discovery and client registration behavior end-to-end.
 
-**Acceptance:** written protocol contract; no production changes; security review of redirect, PKCE, CSRF, token audience, storage, and tenant isolation.
+**Acceptance:** protocol contract documented; no production changes; security review of redirect, PKCE, CSRF, token audience, encrypted props, and tenant isolation.
 
 ## Phase 2 — Authorization Worker
 
-- [ ] Add `apps/auth` Worker using `OAuthAuthorizationServer` v1.
-- [ ] Implement first-party HTTPS authorization, key-entry, and consent pages.
-- [ ] Validate supplied SyrianFatora keys with a harmless read-only endpoint.
-- [ ] Implement secure credential persistence and grant association.
-- [ ] Implement disconnect, revocation, and credential deletion.
-- [ ] Add tests for redirect URI validation, state, PKCE S256, issuer, audience, and tenant isolation.
+- [x] Create `apps/auth` Worker package and pin provider dependency.
+- [x] Implement authorization endpoint using `OAuthAuthorizationServer`.
+- [x] Add first-party consent and API-key entry page using provider consent handles.
+- [x] Validate the API key using a harmless `GET /customers?per_page=1` request.
+- [x] Require `customers.read` for the validation probe.
+- [x] Pass the upstream API key only in provider-encrypted authorization `props`.
+- [x] Add safe response headers and avoid logging credentials or request bodies.
+- [x] Add unit tests for HTML escaping and upstream key validation outcomes.
+- [ ] Add local integration tests against the pinned OAuth Provider package.
+- [ ] Implement credential replacement and disconnect/revocation UX.
+- [ ] Configure the production KV namespace and Worker secrets/bindings only after review.
 
-**Acceptance:** test keys only; no upstream key in client-visible responses, browser storage, logs, or package files; cross-tenant tests pass.
+**Acceptance:** test keys only; no upstream key in client-visible responses, browser storage, logs, or package files; OAuth provider tests pass; no production deployment.
 
 ## Phase 3 — MCP Resource Worker
 
-- [ ] Add `OAuthResourceServer` v1 to `apps/mcp` and preserve the existing tool catalogue.
+- [ ] Add `OAuthResourceServer` v1 to a new MCP source entrypoint and preserve the existing tool catalogue.
 - [ ] Validate tokens through an auth Worker Service Binding.
-- [ ] Resolve the upstream key from trusted grant properties/server-side storage.
+- [ ] Read the upstream key from trusted encrypted grant props.
+- [ ] Enforce `mcp:read` and `mcp:write` at tool execution boundaries.
 - [ ] Map upstream 401/403/404/409/422/429 responses safely.
 - [ ] Verify protocol initialization, tool listing, token expiry, and revocation.
 
@@ -60,8 +70,8 @@
 
 ## Open decisions
 
-- Durable credential storage and encryption model.
-- ChatGPT client metadata discovery vs dynamic client registration compatibility.
-- Final verified MCP and authorization URLs/custom domains.
-- Exact OAuth scopes and write-operation step-up strategy.
-- Whether refresh tokens are required by the supported client flow.
+- Verified production URL for the MCP resource and authorization issuer.
+- Whether ChatGPT needs refresh tokens for this connector lifecycle.
+- Exact mapping between per-resource SyrianFatora API permissions and MCP scopes.
+- Whether to retain optional Dynamic Client Registration for older MCP clients.
+- Production rollout sequence and rollback procedure.
