@@ -47,7 +47,8 @@
 - [x] Enforce `mcp:read` for MCP access and `mcp:write` for create/update/delete tool calls.
 - [x] Keep the payment-void reason requirement and bound request size.
 - [x] Add tests for tool catalogue parity, scope enforcement, key isolation/redaction, and request validation.
-- [ ] Run the Worker package build/runtime tests with the pinned provider package.
+- [x] Build both Worker packages with the Cloudflare `cf` CLI and Vite plugin v2; local `cf build` succeeds for both packages.
+- [ ] Verify Worker runtime behavior and provider integration tests.
 - [ ] Verify protected-resource metadata, invalid/expired tokens, and Service Binding token validation end-to-end.
 - [ ] Verify safe read-only upstream calls using a dedicated test workspace.
 
