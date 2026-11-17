@@ -2,7 +2,7 @@
 
 Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public API, hosted on Cloudflare Workers.
 
-> **Status:** Repository and project baseline created. The production Worker currently remains on its previously deployed `1.1.0` implementation. OAuth is not yet implemented or enabled. Do not treat this repository scaffold as a deployed release.
+> **Project status:** The production baseline is the previously verified Worker implementation `1.1.0`. OAuth authorization-worker development is in progress on [draft PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1). The draft branch is not merged or deployed, and OAuth is not enabled in production. Do not treat this repository or the draft PR as a completed production release.
 
 ## Goals
 
@@ -17,10 +17,12 @@ Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public A
 
 - Cloudflare Worker service: `syrianfatora-mcp`
 - Environment: `production`
-- Previously confirmed deployment: `1.1.0`
+- Last verified deployment: `1.1.0`
 - Existing API authentication: SyrianFatora Bearer token supplied to the MCP request
 - Production bindings: none were present at the last inspection
 - No verified custom domain; do not assume the endpoint until it is probed.
+
+This repository is a source and development project. A change in GitHub does not deploy or modify the Cloudflare production Worker.
 
 ## Security rules
 
@@ -30,14 +32,23 @@ Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public A
 4. Store user credentials and OAuth grants server-side using an appropriate encrypted/secure storage design.
 5. Return only opaque or appropriately scoped OAuth tokens to the MCP client; never expose the upstream SyrianFatora key.
 6. Do not run write operations against a real SyrianFatora workspace during smoke tests.
-7. Do not alter production bindings, routes, DNS, or deployments until the implementation and tests are reviewed.
+7. Do not alter production bindings, routes, DNS, or deployments until the implementation and tests are reviewed and production changes are explicitly approved.
 
 ## Project documents
 
 - [Architecture](docs/architecture.md)
 - [Security model](docs/security.md)
 - [Implementation plan and acceptance criteria](docs/implementation-plan.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## Development
 
-Implementation tooling and runtime versions will be pinned when the first executable Worker source is added. Tests must run locally/CI before any production deployment.
+- Keep changes focused and document behavior, security assumptions, and testing.
+- Run the tests relevant to the changed component before opening a pull request.
+- The OAuth authorization-worker unit tests currently live on [draft PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1), not on `main`. On a checkout that contains `apps/auth`, run `cd apps/auth && npm test`.
+- Never use a production workspace for write-operation tests.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
