@@ -2,7 +2,7 @@
 
 Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public API, hosted on Cloudflare Workers.
 
-> **Project status:** The production baseline is the previously verified Worker implementation `1.1.0`. OAuth authorization-worker development is in progress on [draft PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1). The draft branch is not merged or deployed, and OAuth is not enabled in production. Do not treat this repository or the draft PR as a completed production release.
+> **Status:** OAuth authorization Worker implementation is in progress on [draft PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1). The production Worker remains on its previously deployed `1.1.0` implementation. Nothing in this branch is deployed or enabled in production.
 
 ## Goals
 

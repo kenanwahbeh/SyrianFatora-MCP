@@ -24,7 +24,7 @@ The two Workers communicate through a Cloudflare Service Binding. The MCP Worker
 - **`syrianfatora-auth` Worker:** OAuth authorization server, consent/onboarding UI, client registration/discovery, credential lifecycle.
 - **`syrianfatora-mcp` Worker:** MCP resource server, existing 51-tool catalogue, upstream SyrianFatora API adapter, OAuth token validation through Service Binding.
 - **Workers OAuth Provider v1:** `OAuthAuthorizationServer` and `OAuthResourceServer` from `@cloudflare/workers-oauth-provider`.
-- **Credential store:** choose storage after confirming the v1 provider's encrypted `props` lifecycle and the requirements for durable per-user upstream credentials. Do not store plaintext credentials in ordinary KV without an explicit threat-model decision.
+- **Credential store:** the first implementation passes the validated upstream key through Workers OAuth Provider's encrypted `props`. The provider manages OAuth grants/tokens in its `OAUTH_KV` binding. Do not create a second plaintext KV record for the key. See [ADR 0002](adr/0002-encrypted-grant-props.md).
 - **ChatGPT plugin package:** contains only the verified MCP URL and supported OAuth connection metadata; no user-specific secrets.
 
 ## Identity and tenancy

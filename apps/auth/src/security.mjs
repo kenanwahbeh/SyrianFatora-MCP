@@ -1,0 +1,138 @@
+export const SYRIANFATORA_API_BASE = "https://syrianfatora.com/api/public/v1";
+
+export class CredentialValidationError extends Error {
+  constructor(code, message, status = 400) {
+    super(message);
+    this.name = "CredentialValidationError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+}
+
+export async function readUrlEncodedForm(request, maxBytes = 8192) {
+  const contentType = (request.headers.get("content-type") || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  if (contentType !== "application/x-www-form-urlencoded") {
+    throw new CredentialValidationError(
+      "invalid_form",
+      "The authorization form format is not supported.",
+      415,
+    );
+  }
+
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > maxBytes) {
+    throw new CredentialValidationError(
+      "request_too_large",
+      "The authorization form is too large.",
+      413,
+    );
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) return new URLSearchParams();
+
+  const chunks = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      throw new CredentialValidationError(
+        "request_too_large",
+        "The authorization form is too large.",
+        413,
+      );
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new URLSearchParams(new TextDecoder().decode(body));
+}
+
+/**
+ * Validate a workspace API key using a harmless, read-only endpoint.
+ * The key is never included in a URL, response body, or thrown error.
+ */
+export async function validateSyrianFatoraKey(apiKey, fetchImpl = fetch) {
+  if (typeof apiKey !== "string" || apiKey.length < 20 || apiKey.length > 512) {
+    throw new CredentialValidationError(
+      "invalid_format",
+      "The API key format is not valid. Check the key and try again.",
+      400,
+    );
+  }
+
+  let response;
+  try {
+    const signal = typeof AbortSignal?.timeout === "function"
+      ? AbortSignal.timeout(10_000)
+      : undefined;
+
+    response = await fetchImpl(`${SYRIANFATORA_API_BASE}/customers?per_page=1`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
+      redirect: "error",
+      ...(signal ? { signal } : {}),
+    });
+  } catch {
+    throw new CredentialValidationError(
+      "upstream_unavailable",
+      "SyrianFatora could not be reached securely. Please try again later.",
+      503,
+    );
+  }
+
+  if (response.status === 200) return true;
+
+  if (response.status === 401) {
+    throw new CredentialValidationError(
+      "invalid_key",
+      "The API key was rejected. Check it in SyrianFatora and try again.",
+      400,
+    );
+  }
+
+  if (response.status === 403) {
+    throw new CredentialValidationError(
+      "missing_permission",
+      "The key is valid but needs the customers.read permission, and API access must be enabled for its workspace.",
+      400,
+    );
+  }
+
+  if (response.status === 429) {
+    throw new CredentialValidationError(
+      "rate_limited",
+      "SyrianFatora rate-limited the validation request. Wait before trying again.",
+      429,
+    );
+  }
+
+  throw new CredentialValidationError(
+    "upstream_error",
+    "SyrianFatora returned an unexpected response. Please try again later.",
+    503,
+  );
+}

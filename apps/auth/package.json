@@ -1,0 +1,13 @@
+{
+  "name": "@syrianfatora/auth-worker",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "OAuth 2.1 authorization server for SyrianFatora MCP",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4"
+  }
+}
