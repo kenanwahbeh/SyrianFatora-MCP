@@ -161,6 +161,7 @@ export async function handleMcpRequest(request, props, {
   rateLimit,
   onUpstreamRateLimited,
   maxRequestBytes = 1_048_576,
+  upstreamTimeoutMs = 10_000,
 } = {}) {
   const url = new URL(request.url);
   if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
@@ -309,10 +310,20 @@ export async function handleMcpRequest(request, props, {
   }
 
   try {
+    if (!Number.isSafeInteger(upstreamTimeoutMs) || upstreamTimeoutMs <= 0) {
+      return rpcError(id, -32000, "Upstream request timeout is not configured safely.", 503);
+    }
+    const signal = typeof AbortSignal?.timeout === "function"
+      ? AbortSignal.timeout(upstreamTimeoutMs)
+      : undefined;
+    if (!signal) {
+      return rpcError(id, -32000, "Upstream request timeout is unavailable in this runtime.", 503);
+    }
     const upstream = await fetchImpl(target.toString(), {
       method,
       headers,
       redirect: "error",
+      signal,
       ...(body !== undefined ? { body } : {}),
     });
     if (upstream.status === 429) {
@@ -349,7 +360,10 @@ export async function handleMcpRequest(request, props, {
       }],
       isError: !upstream.ok,
     });
-  } catch {
+  } catch (error) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+      return toolError(id, "SyrianFatora API request timed out. Please retry later.");
+    }
     return toolError(id, "SyrianFatora API request failed. Please retry later.");
   }
 }
