@@ -1,82 +1,81 @@
 # Implementation plan and acceptance criteria
 
-## Phase 0 — Baseline and source control
+## Agreed direction — 2026-11-18
 
-- [x] Create GitHub repository.
-- [x] Record current production baseline and security constraints.
-- [x] Archive the exact deployed Worker v1.1.0 source as `src/worker-v1.1.0.mjs`.
-- [ ] Confirm the public MCP endpoint with direct HTTP probes.
+Migrate the **existing production MCP Worker in place**. Keep its exact Cloudflare service name `syrianfatora-mcp`, public MCP identity, and 51-tool catalogue. Do not create a replacement MCP Worker. A separate `syrianfatora-auth` authorization Worker is required by Workers OAuth Provider v1 and connects to the existing MCP Worker through a Service Binding.
 
-## Phase 1 — OAuth architecture and compatibility
+The user has directed that automated tests be deferred for this immediate migration. This is a testing exception, not a claim that tests passed. No production write-operation tests are allowed.
 
-- [x] Verify Cloudflare's current Workers OAuth Provider v1 split architecture.
-- [x] Select separate authorization and resource-server roles.
-- [x] Pin Workers OAuth Provider v1 dependency to 1.2.4.
-- [x] Confirm the current authorization and consent helper APIs against Cloudflare documentation.
-- [x] Confirm Client ID Metadata Documents and legacy Dynamic Client Registration support.
-- [x] Define OAuth scopes: `mcp:read`, `mcp:write`, and optional `offline_access`.
-- [x] Define `ISSUER`, `MCP_SERVER_URL`, and `OAUTH_KV` runtime configuration contract.
-- [x] Choose encrypted OAuth provider `props` for the per-grant upstream API key; do not create a separate plaintext credential store.
-- [ ] Confirm the exact public MCP endpoint and authorization origin.
-- [ ] Verify ChatGPT remote MCP discovery and client registration behavior end-to-end.
+## Phase 0 — Existing state and build pipeline
 
-**Acceptance:** protocol contract documented; no production changes; security review of redirect, PKCE, CSRF, token audience, encrypted props, and tenant isolation.
+- [x] GitHub repository and source-controlled OAuth implementation exist.
+- [x] Existing legacy production Worker source is archived in the repository.
+- [x] Cloudflare production service name identified as `syrianfatora-mcp`.
+- [x] Current OAuth code merged to `main`.
+- [x] Cloudflare Build Token issue resolved by user.
+- [x] Build reached deployment stage; deployment aborted safely due Worker-name/script-API conflict.
+- [ ] Record exact current live script, metadata, settings, bindings, version ID, and deployment ID as rollback baseline.
+- [ ] Verify exact public MCP endpoint and account Worker subdomain.
 
-## Phase 2 — Authorization Worker
+## Phase 1 — Production topology and configuration
 
-- [x] Create `apps/auth` Worker package and pin provider dependency.
-- [x] Implement authorization endpoint using `OAuthAuthorizationServer`.
-- [x] Add first-party consent and API-key entry page using provider consent handles.
-- [x] Validate the API key using a harmless `GET /customers?per_page=1` request.
-- [x] Require `customers.read` for the validation probe.
-- [x] Pass the upstream API key only in provider-encrypted authorization `props`.
-- [x] Add safe response headers and avoid logging credentials or request bodies.
-- [x] Add unit tests for HTML escaping, bounded form parsing, upstream key validation, and consent-scope validation.
-- [ ] Add local integration tests against the pinned OAuth Provider package.
-- [ ] Implement credential replacement and disconnect/revocation UX.
-- [ ] Configure the production KV namespace and Worker secrets/bindings only after review.
+- [x] Decision: keep `syrianfatora-mcp` as the only MCP resource Worker.
+- [x] Decision: use separate `syrianfatora-auth` OAuth authorization Worker.
+- [x] Decision: connect auth and MCP through Service Binding `AUTH_SERVER` → `SyrianFatoraAuth`.
+- [x] Decision: use OAuth Authorization Code + PKCE and `mcp:read` / `mcp:write`.
+- [ ] Discover and record the exact production MCP URL and authorization issuer URL.
+- [ ] Create production KV namespace and record its ID (ID is configuration metadata, not a secret).
+- [ ] Update auth config to production Worker name, issuer, MCP URL, and KV binding.
+- [ ] Update MCP config to exact existing Worker name `syrianfatora-mcp`, exact URLs, and Service Binding target `syrianfatora-auth`.
+- [ ] Confirm Cloudflare build/deploy pipeline uses the intended Worker and cannot silently target a preview service.
 
-**Acceptance:** test keys only; no upstream key in client-visible responses, browser storage, logs, or package files; OAuth provider tests pass; no production deployment.
+## Phase 2 — Authorization Worker deployment
 
-## Phase 3 — MCP Resource Worker
+- [x] Authorization Worker source and HTTPS credential onboarding flow exist.
+- [x] Provider package pinned to 1.2.4.
+- [x] API key validation uses read-only `GET /customers?per_page=1`.
+- [x] API key is passed through provider-encrypted grant `props`.
+- [ ] Configure production `OAUTH_KV` namespace.
+- [ ] Deploy `syrianfatora-auth` and record deployment/version ID.
+- [ ] Verify `/health`, issuer metadata, registration/discovery endpoints, and authorization page over HTTPS.
 
-- [x] Add `OAuthResourceServer` v1 wrapper in `apps/mcp`.
-- [x] Validate tokens through the auth Worker Service Binding contract.
-- [x] Read the upstream key only from validated encrypted grant props.
-- [x] Preserve all 51 existing MCP tool definitions and request mappings.
-- [x] Enforce `mcp:read` for MCP access and `mcp:write` for create/update/delete tool calls.
-- [x] Keep the payment-void reason requirement and bound request size.
-- [x] Add tests for tool catalogue parity, scope enforcement, key isolation/redaction, and request validation.
-- [x] Build both Worker packages with the Cloudflare `cf` CLI and Vite plugin v2; local `cf build` succeeds for both packages.
-- [ ] Verify Worker runtime behavior and provider integration tests.
-- [ ] Verify protected-resource metadata, invalid/expired tokens, and Service Binding token validation end-to-end.
-- [ ] Verify safe read-only upstream calls using a dedicated test workspace.
+## Phase 3 — In-place MCP resource migration
 
-**Acceptance:** `initialize` and `tools/list` succeed with OAuth; unauthorized requests fail closed; writes require `mcp:write`; safe read-only tools work with a test workspace.
+- [x] OAuth resource-server wrapper source exists.
+- [x] Existing 51 tool definitions are retained in the OAuth handler.
+- [x] `mcp:read` / `mcp:write` enforcement is implemented in source.
+- [ ] Capture complete rollback artifact and metadata for the currently deployed `syrianfatora-mcp`.
+- [ ] Deploy OAuth resource-server code to the existing `syrianfatora-mcp` service (same Worker name).
+- [ ] Record the resulting deployment/version ID.
+- [ ] Verify health, protected-resource metadata, invalid-token rejection, and MCP `initialize` / `tools/list`.
+- [ ] Verify a harmless read-only call with an authorized test account.
+- [ ] Confirm no duplicate public MCP Worker was created.
 
-## Phase 4 — Plugin package
+## Phase 4 — Client connection
 
-- [ ] Update the existing SyrianFatora plugin, not create a duplicate.
-- [ ] Add only the verified MCP endpoint and supported OAuth metadata/configuration.
-- [ ] Remove legacy static Bearer-token instructions.
-- [ ] Verify the authorization flow from ChatGPT.
+- [ ] Update the existing ChatGPT connector/plugin configuration; do not create a duplicate.
+- [ ] Point it to the verified existing MCP URL and OAuth discovery metadata.
+- [ ] Remove legacy static Bearer-key instructions.
+- [ ] Complete a real ChatGPT OAuth connection and record the observed result.
 
-**Acceptance:** user can authorize without pasting the upstream API key into chat or plugin configuration.
+## Phase 5 — Credential lifecycle and follow-up hardening
 
-## Phase 5 — Release and production rollout
+- [ ] Implement credential replacement.
+- [ ] Implement user disconnect and OAuth grant revocation.
+- [ ] Confirm credential deletion/invalidation behavior and tenant isolation.
+- [ ] Restore automated unit/integration/security tests before subsequent feature releases.
+- [ ] Verify refresh-token behavior only if the client lifecycle requires it.
 
-- [ ] Run unit, integration, security, and MCP protocol tests.
-- [ ] Review deployment diff, bindings, storage migrations, and rollback.
-- [ ] Obtain explicit approval for production bindings and deployments.
-- [ ] Deploy auth Worker and migrate the MCP Worker in a controlled sequence.
-- [ ] Verify health, OAuth discovery, and read-only MCP smoke tests.
+## Production safety and stop conditions
 
-**Acceptance:** production deployment IDs, health probe, OAuth discovery probe, and read-only MCP smoke test are recorded. No write operation is used for smoke testing.
+- Never deploy `.invalid` placeholders.
+- Never guess public URLs, Worker subdomains, or KV namespace IDs.
+- Never use `--force` merely to bypass the script API conflict. First capture the live script and complete metadata, then verify the replacement and rollback path.
+- Do not change DNS/custom domains unless a concrete need is established and the change is recorded.
+- Do not run create/update/delete tool calls against a real customer workspace during smoke tests.
+- Do not record secrets in this repository or conversation.
+- If the deployed artifact, endpoint identity, or rollback target cannot be verified, stop before replacing the live MCP Worker.
 
-## Open decisions
+## Testing exception
 
-- Verified production URL for the MCP resource and authorization issuer.
-- Whether ChatGPT needs refresh tokens for this connector lifecycle.
-- Exact mapping between per-resource SyrianFatora API permissions and MCP scopes.
-- Whether to retain optional Dynamic Client Registration for older MCP clients.
-- Production rollout sequence and rollback procedure.
+Automated tests are deferred for the immediate production migration at the user's direction. The implementation plan must not mark deferred tests as passed. Use read-only operational probes and record unverified runtime behavior. Testing becomes a release gate again for later feature work.
