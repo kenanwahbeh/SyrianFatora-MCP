@@ -109,3 +109,14 @@ Automated tests are deferred for the immediate production migration at the user'
 - [ ] Complete operational verification before production rollout.
 
 The implementation is committed to source; the unchecked items remain production blockers.
+
+## Provider quota confirmation
+
+- [x] Confirmed from the official SyrianFatora developer documentation: default 1,000 successful requests per workspace per day; daily limit may be increased on request.
+- [x] Confirmed paid plans add a monthly quota measured by billing cycle; no universal public numeric value is published.
+- [x] Confirmed response headers X-RateLimit-Limit and X-RateLimit-Remaining and 429 Retry-After.
+- [ ] Confirm this workspace's actual daily limit and plan-specific monthly quota.
+- [ ] Confirm one API key per workspace, or obtain a stable workspace ID so multiple keys share one limiter identity.
+- [ ] Decide whether to persist and expose provider quota headers for operational visibility.
+
+Provider source: https://syrianfatora.com/developers
