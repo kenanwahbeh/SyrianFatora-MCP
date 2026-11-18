@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
-import { Miniflare, convertV4MiniflareOptions } from "miniflare";
+import { Miniflare, convertV4MiniflareOptions, createFetchMock } from "miniflare";
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
 const REDIRECT_URI = "http://localhost:8787/callback";
 
 let miniflare;
+const fetchMock = createFetchMock();
 
 before(async () => {
+  fetchMock.disableNetConnect();
+  fetchMock.get("https://syrianfatora.com")
+    .intercept({ method: "GET", path: "/api/public/v1/customers?per_page=1" })
+    .reply(200);
+
   miniflare = new Miniflare(convertV4MiniflareOptions({
     scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
     modules: true,
@@ -30,21 +36,7 @@ before(async () => {
     durableObjects: {
       RATE_LIMITER: { className: "CredentialRateLimiter", useSQLite: true },
     },
-    // Intercept every outbound request from workerd. Only the harmless
-    // SyrianFatora read-only key-validation request is allowed in this test.
-    outboundService: async (request) => {
-      const url = new URL(request.url);
-      if (
-        request.method === "GET" &&
-        url.origin === "https://syrianfatora.com" &&
-        url.pathname === "/api/public/v1/customers" &&
-        url.search === "?per_page=1" &&
-        request.headers.get("Authorization") === "Bearer sk_test_runtime_only_key_123456"
-      ) {
-        return new Response(null, { status: 200 });
-      }
-      return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
-    },
+    fetchMock,
   }));
   await miniflare.ready;
 });
