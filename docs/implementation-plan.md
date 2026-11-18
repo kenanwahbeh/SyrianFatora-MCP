@@ -58,7 +58,20 @@ The user has directed that automated tests be deferred for this immediate migrat
 - [ ] Remove legacy static Bearer-key instructions.
 - [ ] Complete a real ChatGPT OAuth connection and record the observed result.
 
-## Phase 5 — Credential lifecycle and follow-up hardening
+## Phase 5 — Rate limiting and upstream quota protection (production blocker)
+
+- [ ] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
+- [ ] Add a per-IP/edge abuse gate and repeated credential-fingerprint attempt gate for `POST /authorize`.
+- [ ] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
+- [ ] Implement the strict coordinator with a Durable Object; atomically check and charge before every upstream request, including concurrent requests and requests from different Cloudflare locations.
+- [ ] Add per-grant burst limits for MCP clients; do not rely on random grant IDs as the only quota identity.
+- [ ] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
+- [ ] Honor SyrianFatora 429 and Retry-After; add per-credential cooldown/circuit breaker and disable automatic quota-exhausting retries.
+- [ ] Set finite configurable thresholds using verified SyrianFatora quota information and legitimate usage assumptions; document values and rationale. No quota values are currently confirmed.
+- [ ] Verify that multiple OAuth grants using the same upstream credential share one quota budget.
+- [ ] Verify rate-limit rejection paths do not call the upstream API.
+
+## Phase 6 — Credential lifecycle and follow-up hardening
 
 - [ ] Implement credential replacement.
 - [ ] Implement user disconnect and OAuth grant revocation.
@@ -67,6 +80,8 @@ The user has directed that automated tests be deferred for this immediate migrat
 - [ ] Verify refresh-token behavior only if the client lifecycle requires it.
 
 ## Production safety and stop conditions
+
+- Production rollout is blocked until rate limiting is implemented at both `POST /authorize` before credential validation and MCP before every upstream proxy call. Documentation alone is not enforcement.
 
 - Never deploy `.invalid` placeholders.
 - Never guess public URLs, Worker subdomains, or KV namespace IDs.
