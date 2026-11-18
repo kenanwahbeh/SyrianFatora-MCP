@@ -212,7 +212,7 @@ The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documen
 - PR: https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/14
 - No Cloudflare production resources, DNS, Worker routes, or deployments were changed.
 - Added `apps/auth/test/rate-limit-client.test.mjs` and `apps/mcp/test/rate-limit-client.test.mjs`.
-- MCP build and tests passed in GitHub Actions for the focused-test commit. Auth build was still running at the time of the latest check; final result must be recorded after completion.
+- Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: MCP run #59 and Auth run #74. Both completed dependency installation, `npm run build:check`, and `npm test`.
 - The test suites mock the Durable Object namespace. They do not prove SQLite transaction behavior or true concurrent request serialization.
 - Both production configs point to the same DO class in source. The repository cannot prove that production bindings are deployed or that `RATE_LIMIT_HMAC_SECRET` has identical bytes in both Workers.
 - Preview deliberately omits `RATE_LIMITER`; rate-limited operations fail closed there.
