@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
-import { Miniflare } from "miniflare";
+import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
@@ -10,7 +10,7 @@ let miniflare;
 const outboundRequests = [];
 
 before(async () => {
-  miniflare = new Miniflare({
+  miniflare = new Miniflare(convertV4MiniflareOptions({
     workers: [{
     name: "auth",
     scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
@@ -49,7 +49,7 @@ before(async () => {
       return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
     },
     }],
-  });
+  }));
   await miniflare.ready;
 });
 
