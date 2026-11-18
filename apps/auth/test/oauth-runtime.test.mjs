@@ -1,44 +1,24 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
-import miniflarePackage from "miniflare";
-
-const { Miniflare, convertV4MiniflareOptions, createFetchMock } = miniflarePackage;
+import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
 const REDIRECT_URI = "http://localhost:8787/callback";
 
 let miniflare;
-let fetchMock;
 const outboundRequests = [];
 
 before(async () => {
-  // Use Miniflare's supported fetchMock integration so outbound requests are
-  // intercepted before any DNS/network access. Unmatched requests fail closed.
-  fetchMock = createFetchMock();
-  fetchMock.disableNetConnect();
-  fetchMock
-    .get("https://syrianfatora.com")
-    .intercept({
-      method: "GET",
-      path: "/api/public/v1/customers?per_page=1",
-    })
-    .reply(({ method, path, headers }) => {
-      const authorization = headers instanceof Headers
-        ? headers.get("authorization")
-        : headers.authorization ?? headers.Authorization ?? null;
-      outboundRequests.push({ method, path, authorization });
-      return { statusCode: 200, data: "" };
-    })
-    .persist();
-
   miniflare = new Miniflare(convertV4MiniflareOptions({
     workers: [{
       name: "auth",
       scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
       modules: true,
       compatibilityDate: "2026-11-17",
-      compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
+      // Keep strict public-fetch routing out of this isolated Miniflare mock
+      // test; production retains the flag in its deployed Worker configuration.
+      compatibilityFlags: ["nodejs_compat"],
       bindings: {
         ISSUER,
         MCP_SERVER_URL: MCP_RESOURCE,
@@ -55,7 +35,25 @@ before(async () => {
       durableObjects: {
         RATE_LIMITER: { className: "CredentialRateLimiter", useSQLite: true },
       },
-      fetchMock,
+      outboundService: async (request) => {
+        const url = new URL(request.url);
+        const authorization = request.headers.get("Authorization");
+        outboundRequests.push({
+          method: request.method,
+          path: url.pathname + url.search,
+          authorization,
+        });
+        if (
+          request.method === "GET" &&
+          url.origin === "https://syrianfatora.com" &&
+          url.pathname === "/api/public/v1/customers" &&
+          url.search === "?per_page=1" &&
+          authorization === "Bearer sk_test_runtime_only_key_123456"
+        ) {
+          return new Response(null, { status: 200 });
+        }
+        return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
+      },
     }],
   }));
   await miniflare.ready;
