@@ -26,6 +26,7 @@ const TEST_KEYS = [
   "sk_test_runtime_second_key_654321",
 ];
 const REDIRECT_URI = "http://localhost:8787/callback";
+const CIMD_URL = "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/oauth/client-metadata.json";
 
 let miniflare;
 let resourceServer;
@@ -107,6 +108,18 @@ before(async () => {
           path: url.pathname + url.search,
           authorization,
         });
+        if (request.method === "GET" && url.href === CIMD_URL) {
+          return Response.json({
+            client_id: CIMD_URL,
+            client_name: "CIMD runtime test client",
+            redirect_uris: [REDIRECT_URI],
+            response_types: ["code"],
+            grant_types: ["authorization_code"],
+            token_endpoint_auth_method: "none",
+          }, {
+            headers: { "Cache-Control": "no-store" },
+          });
+        }
         if (
           request.method === "GET" &&
           url.origin === "https://syrianfatora.com" &&
@@ -219,6 +232,29 @@ test("CIMD rejects a root client identifier before metadata resolution", async (
   );
   const response = await request(`/authorize?${params}`);
   assert.equal(response.status, 400);
+});
+
+test("CIMD resolves a valid HTTPS metadata document and validates its exact client_id", async () => {
+  const outboundStart = outboundRequests.length;
+  const verifier = "runtime-cimd-success-verifier-that-is-long-enough";
+  const params = authorizationParams(
+    { client_id: CIMD_URL },
+    { code_challenge: await s256(verifier) },
+  );
+
+  const response = await request(`/authorize?${params}`);
+  assert.equal(response.status, 200, await response.clone().text());
+  const html = await response.text();
+  assert.match(html, /CIMD runtime test client/);
+  assert.match(html, /Connect your SyrianFatora workspace/);
+
+  const cimdRequests = outboundRequests.slice(outboundStart);
+  assert.ok(cimdRequests.length >= 1, "authorization must fetch the configured CIMD document");
+  for (const cimdRequest of cimdRequests) {
+    assert.equal(cimdRequest.method, "GET");
+    assert.equal(cimdRequest.path, "/oauth/client-metadata.json");
+    assert.equal(cimdRequest.authorization, null);
+  }
 });
 
 test("authorization rejects an unregistered redirect URI before showing consent", async () => {
