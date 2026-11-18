@@ -193,6 +193,7 @@ async function beginAuthorization(client, verifier, scope = "mcp:read") {
 }
 
 async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
+  const outboundStart = outboundRequests.length;
   const body = new URLSearchParams({
     handle,
     decision: "approve",
@@ -208,8 +209,16 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
     },
     body,
   });
-  const outbound = outboundRequests.at(-1);
-  assert.ok(outbound, "approval must call the isolated upstream mock");
+  assert.equal(
+    response.status,
+    302,
+    `approval should redirect after successful validation; got ${response.status}: ${await response.clone().text()}`,
+  );
+  const outbound = outboundRequests.slice(outboundStart).at(-1);
+  assert.ok(
+    outbound,
+    `approval must call the isolated upstream mock (observed ${outboundRequests.length - outboundStart} outbound calls)`,
+  );
   assert.equal(outbound.method, "GET");
   assert.equal(outbound.url, "https://syrianfatora.com/api/public/v1/customers?per_page=1");
   assert.equal(outbound.authorization, "Bearer sk_test_runtime_only_key_123456");
