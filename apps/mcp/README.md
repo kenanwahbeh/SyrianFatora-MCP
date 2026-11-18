@@ -40,6 +40,12 @@ The current checked-in config is still preview-only and contains `.invalid` URLs
 
 Cloudflare's requiredScopes metadata is advertised to clients; this Worker explicitly enforces scopes in its handler as well.
 
+## Mandatory upstream rate limiting
+
+Every upstream fetch from the MCP handler must pass a limiter before the request is sent. The strict quota identity is a keyed HMAC fingerprint of the upstream API credential, not the random OAuth grant subject, so multiple grants cannot multiply one workspace's allowance. Use a Durable Object to coordinate the strict per-credential budget across requests and Cloudflare locations, with a separate per-grant burst gate. Share the same credential budget with authorization-key validation. Fail closed when the limiter is unavailable and honor upstream 429 / Retry-After with a per-credential cooldown.
+
+The current source does not yet implement this control. Production deployment is blocked until implementation and verification.
+
 ## Build and testing
 
 `npm run build:check` validates the Worker build without deploying; `npm test` runs unit tests. The user has deferred automated tests for the immediate production migration. Do not describe this as successful end-to-end OAuth verification. Use only safe, read-only production probes.
