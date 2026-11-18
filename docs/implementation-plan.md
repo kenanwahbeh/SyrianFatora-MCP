@@ -76,7 +76,7 @@ PR #14 adds focused Auth and MCP rate-limit client tests and both package CI wor
 - [ ] Implement credential replacement.
 - [ ] Implement user disconnect and OAuth grant revocation.
 - [ ] Confirm credential deletion/invalidation behavior and tenant isolation.
-- [ ] Restore automated unit/integration/security tests before subsequent feature releases.
+- [ ] Add direct Durable Object unit/integration tests for SQLite transaction atomicity and concurrent consumption before production enablement.
 - [ ] Verify refresh-token behavior only if the client lifecycle requires it.
 
 ## Production safety and stop conditions
@@ -103,18 +103,18 @@ PR #14 adds Auth and MCP rate-limit client tests. Both GitHub Actions workflows 
 - [x] Use keyed HMAC-SHA-256 identities; never persist raw credentials, IP addresses or grant subjects in limiter storage.
 - [x] Fail closed when configuration or the coordinator is unavailable; return controlled 429/503 responses.
 - [x] Record upstream 429 cooldowns and honor Retry-After without automatic retries.
-- [ ] Confirm provider quota and configure finite runtime thresholds.
+- [ ] Confirm this workspace's actual provider quota and configure finite runtime thresholds.
 - [ ] Set the identical HMAC secret on both Workers.
 - [x] Run CI build checks and package tests for the initial source commit.
 - [x] Add focused Auth and MCP rate-limit client tests; latest CI results are recorded in the PR and audit log.
 - [ ] Add direct Durable Object SQLite atomicity/concurrency tests and complete safe preview verification.
-- [ ] Complete operational verification before production rollout.
+- [ ] Complete operational verification before production rollout, including deployed bindings, identical HMAC secret provisioning, and generated migration metadata.
 
 The implementation is committed to source; the unchecked items remain production blockers.
 
 ## Provider quota confirmation
 
-- [x] Confirmed from the official SyrianFatora developer documentation: default 1,000 successful requests per workspace per day; daily limit may be increased on request.
+- [x] Confirmed from the official SyrianFatora developer documentation: default daily quota is 1,000 requests per workspace; it may be increased on request. The documentation also says requests, including 429 responses, are recorded in usage/audit logs; this does not establish whether every 429 consumes the daily allowance.
 - [x] Confirmed paid plans add a monthly quota measured by billing cycle; no universal public numeric value is published.
 - [x] Confirmed response headers X-RateLimit-Limit and X-RateLimit-Remaining and 429 Retry-After.
 - [ ] Confirm this workspace's actual daily limit and plan-specific monthly quota.
