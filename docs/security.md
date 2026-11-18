@@ -45,7 +45,7 @@ Rate limiting is a **mandatory production release gate**, not an optional harden
 - Cloudflare Workers Rate Limiting bindings may provide a fast edge gate for IP-level authorization attempts and per-grant burst protection. Their counters are approximate and local to each Cloudflare location; they are **not** a strict global or per-workspace quota control.
 - A Durable Object keyed by the keyed credential fingerprint is the required strict shared coordinator for each upstream SyrianFatora credential. It must atomically check and charge the credential budget before allowing a proxy call, coordinate concurrent requests, and persist the rolling/window counter and cooldown state.
 - Set finite thresholds from the actual SyrianFatora API quota and expected legitimate client usage. Do not invent provider limits. If the upstream quota is unknown, use conservative configurable caps and obtain an explicit reviewed budget before production enablement; do not ship with an unlimited or disabled limiter.
-- The same credential-level budget must cover both `validateSyrianFatoraKey` and all MCP upstream calls. Keep authorization-attempt/IP limits as an additional abuse control, not a substitute for credential-level quota accounting.
+- The same credential-level budget must cover both `validateSyrianFatoraKey` and all MCP upstream calls. Keep authorization-attempt/IP limits as an additional abuse control, not a substitute for credential-level quota accounting. The current identity is a keyed API-key fingerprint: it unifies grants that use the same key, but does not aggregate different keys belonging to one workspace.
 
 ### Current implementation status
 
@@ -67,7 +67,7 @@ This is source implementation, not production verification. Finite thresholds ar
 
 ## Testing exception
 
-PR #14 adds focused Node tests for the Auth and MCP rate-limit clients. GitHub Actions build checks and package tests are being run on the PR branch; record the final run results in the audit and migration logs. These client tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or real concurrent consumption. Direct Durable Object tests and production read-only configuration verification remain release gates. No production write-operation tests are allowed.
+PR #14 adds focused Node tests for the Auth and MCP rate-limit clients. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: Auth run #74 and MCP run #59 each passed dependency installation, `npm run build:check`, and `npm test`. The tests mock the Durable Object namespace and do not prove SQLite atomicity or real concurrent consumption. These client tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or real concurrent consumption. Direct Durable Object tests and production read-only configuration verification remain release gates. No production write-operation tests are allowed.
 
 ## Incident response
 
