@@ -185,6 +185,33 @@ test("rejects malformed JSON-RPC payloads", async () => {
   assert.equal((await json(response)).error.code, -32700);
 });
 
+test("aborts slow upstream requests after the configured timeout", async () => {
+  let observedSignal;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: {},
+  }), props, {
+    rateLimit: async () => ({ allowed: true }),
+    upstreamTimeoutMs: 20,
+    fetchImpl: async (_url, options) => {
+      observedSignal = options.signal;
+      return new Promise((_resolve, reject) => {
+        if (options.signal.aborted) {
+          reject(options.signal.reason);
+          return;
+        }
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+      });
+    },
+  });
+  const body = await json(response);
+
+  assert.ok(observedSignal instanceof AbortSignal);
+  assert.equal(observedSignal.aborted, true);
+  assert.equal(body.result.isError, true);
+  assert.equal(body.result.content[0].text, "SyrianFatora API request timed out. Please retry later.");
+});
+
 test("does not reveal upstream fetch exceptions or credentials", async () => {
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "customers_list",
