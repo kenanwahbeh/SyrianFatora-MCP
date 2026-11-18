@@ -94,3 +94,18 @@ The user has directed that automated tests be deferred for this immediate migrat
 ## Testing exception
 
 Automated tests are deferred for the immediate production migration at the user's direction. The implementation plan must not mark deferred tests as passed. Use read-only operational probes and record unverified runtime behavior. Testing becomes a release gate again for later feature work.
+
+## Rate-limiting implementation
+
+- [x] Add a shared SQLite Durable Object coordinator hosted by the authorization Worker.
+- [x] Gate authorization approval before SyrianFatora key validation using IP and credential-attempt sliding windows.
+- [x] Gate every MCP upstream fetch using the same credential-wide budget plus a per-grant sliding window.
+- [x] Use keyed HMAC-SHA-256 identities; never persist raw credentials, IP addresses or grant subjects in limiter storage.
+- [x] Fail closed when configuration or the coordinator is unavailable; return controlled 429/503 responses.
+- [x] Record upstream 429 cooldowns and honor Retry-After without automatic retries.
+- [ ] Confirm provider quota and configure finite runtime thresholds.
+- [ ] Set the identical HMAC secret on both Workers.
+- [ ] Run build checks and safe preview verification.
+- [ ] Complete operational verification before production rollout.
+
+The implementation is committed to source; the unchecked items remain production blockers.
