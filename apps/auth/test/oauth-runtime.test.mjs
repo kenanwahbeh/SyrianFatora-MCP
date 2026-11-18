@@ -126,11 +126,11 @@ test("valid S256 authorization reaches the first-party consent page without redi
   });
   const response = await request(`/authorize?${params}`);
   assert.equal(response.status, 200);
-  assert.match(response.headers.get("Content-Type") || "", /text\\/html/i);
+  assert.ok((response.headers.get("Content-Type") || "").includes("text/html"));
   const html = await response.text();
   assert.match(html, /Connect your SyrianFatora workspace/);
   assert.match(html, /name="handle"/);
-  assert.match(html, /mcp:read \\(required\\)/);
-  assert.match(html, /mcp:write \\(optional\\)/);
+  assert.ok(html.includes("mcp:read (required)"));
+  assert.ok(html.includes("mcp:write (optional)"));
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
