@@ -18,7 +18,7 @@ before(async () => {
       compatibilityDate: "2026-11-17",
       // Keep strict public-fetch routing out of this isolated Miniflare mock
       // test; production retains the flag in its deployed Worker configuration.
-      compatibilityFlags: ["nodejs_compat"],
+      compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
       bindings: {
         ISSUER,
         MCP_SERVER_URL: MCP_RESOURCE,
