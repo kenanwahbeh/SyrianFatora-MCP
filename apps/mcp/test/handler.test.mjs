@@ -65,6 +65,7 @@ test("read-only customer listing forwards the grant key only upstream", async ()
     name: "customers_list",
     arguments: { query: { page: 2, per_page: 10, active: true } },
   }), props, {
+    rateLimit: async () => ({ allowed: true }),
     fetchImpl: async (url, options) => {
       observed = { url, options };
       return Response.json({ data: [{ id: "customer-1" }] }, {
@@ -103,6 +104,7 @@ test("write operations are allowed when mcp:write is granted", async () => {
     arguments: { body: { customer_id: "c-1" } },
   }), props, {
     requireWriteScope: () => null,
+    rateLimit: async () => ({ allowed: true }),
     fetchImpl: async (url, options) => {
       observed = { url, options };
       return Response.json({ id: "invoice-1" }, { status: 201 });
@@ -150,6 +152,7 @@ test("redacts the upstream API key if the upstream response echoes it", async ()
     name: "customers_list",
     arguments: {},
   }), props, {
+    rateLimit: async () => ({ allowed: true }),
     fetchImpl: async () => Response.json({ debug: apiKey }),
   });
   const text = (await json(response)).result.content[0].text;
@@ -187,6 +190,7 @@ test("does not reveal upstream fetch exceptions or credentials", async () => {
     name: "customers_list",
     arguments: {},
   }), props, {
+    rateLimit: async () => ({ allowed: true }),
     fetchImpl: async () => { throw new Error(`request failed: ${apiKey}`); },
   });
   const body = await json(response);
