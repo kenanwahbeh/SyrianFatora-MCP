@@ -43,7 +43,7 @@ The approval POST must pass an enforced limiter before `validateSyrianFatoraKey`
 - The provider encrypts authorization `props`; the resource Worker must not log or expose `props.upstreamApiKey`.
 - The random OAuth subject identifies a grant, not a verified human identity or SyrianFatora workspace ID.
 - Credential replacement and disconnect/revocation UX are not implemented yet.
-- Local Worker-runtime integration and full OAuth end-to-end behavior are not verified yet.
+- Preview smoke tests verify OAuth discovery, DCR, PKCE consent, protected-resource metadata, and MCP-to-Auth service binding. Full token issuance and refresh with a valid SyrianFatora API key remain unverified.
 - The user has deferred automated tests for the immediate production migration; this is not a passing test result.
 
 ## Enforced rate-limit coordinator
@@ -66,7 +66,7 @@ Set finite positive integer values only after verifying the SyrianFatora quota a
 
 Set the secret RATE_LIMIT_HMAC_SECRET on both Workers to the exact same random value of at least 32 bytes. It is used only to derive HMAC-SHA-256 identities; raw API keys, IP addresses and OAuth grant subjects are not stored as limiter identifiers. Never commit the secret.
 
-The Preview configuration intentionally does not bind a production limiter. Preview requests that reach an upstream call fail closed; do not connect Preview to production quota or customer data.
+Preview binds only to the dedicated `syrianfatora-auth-preview` Durable Object and Preview KV namespace; it does not use Production quota or customer data. Preview-only test thresholds are configured in `cloudflare.config.ts` (100 requests per 60 seconds and a 30-second upstream 429 cooldown). Do not copy these values to Production.
 
 ## SyrianFatora provider quota reference
 
