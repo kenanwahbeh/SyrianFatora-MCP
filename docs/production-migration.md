@@ -149,3 +149,15 @@ For every production action, append a row with:
 - any unresolved warning
 
 Never record credential values or secret material in this file.
+
+## Rate-limiter source implementation (2026-11-18)
+
+- Added CredentialRateLimiter, a SQLite-backed Durable Object exported by the authorization Worker.
+- Bound the authorization Worker to its coordinator and the MCP Worker to the same exported class.
+- Added authorization IP and credential-attempt gates before validateSyrianFatoraKey.
+- Added a shared credential sliding-window budget and per-grant sliding-window budget before every MCP upstream fetch.
+- Added HMAC-derived object and grant identities; raw credentials, IP addresses and grant subjects are not stored in limiter storage.
+- Added fail-closed handling and upstream 429 cooldown recording using Retry-After.
+- Added Preview configuration declarations; Preview does not receive a production limiter binding and must fail closed.
+
+Not yet verified: build checks, Worker runtime behavior, cross-Worker Durable Object binding, live quota values, HMAC secret parity, and production deployment. No production Worker, route, DNS record or customer workspace was changed. Thresholds remain unset until SyrianFatora quota information is confirmed.
