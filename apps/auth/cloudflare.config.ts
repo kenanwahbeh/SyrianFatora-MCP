@@ -30,6 +30,9 @@ export default defineConfig(({ isPreview }) => ({
 					? "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
+			ACCESS_TOKEN_TTL_SECONDS: bindings.text("3600"),
+			REFRESH_TOKEN_TTL_SECONDS: bindings.text("2592000"),
+			CLIENT_REGISTRATION_TTL_SECONDS: bindings.text("7776000"),
 			...(isPreview ? {
 				RATE_LIMITER: bindings.durableObject({
 					worker: "syrianfatora-auth-preview",
