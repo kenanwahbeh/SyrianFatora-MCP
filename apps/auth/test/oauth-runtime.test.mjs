@@ -4,6 +4,10 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
+const TEST_KEYS = [
+  "sk_test_runtime_only_key_123456",
+  "sk_test_runtime_second_key_654321",
+];
 const REDIRECT_URI = "http://localhost:8787/callback";
 
 let miniflare;
@@ -30,6 +34,9 @@ before(async () => {
         RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: "100",
         RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS: "60",
         RATE_LIMIT_GRANT_WINDOW_SECONDS: "60",
+        ACCESS_TOKEN_TTL_SECONDS: "60",
+        REFRESH_TOKEN_TTL_SECONDS: "60",
+        CLIENT_REGISTRATION_TTL_SECONDS: "60",
       },
       kvNamespaces: ["OAUTH_KV"],
       durableObjects: {
@@ -48,11 +55,24 @@ before(async () => {
           url.origin === "https://syrianfatora.com" &&
           url.pathname === "/api/public/v1/customers" &&
           url.search === "?per_page=1" &&
-          authorization === "Bearer sk_test_runtime_only_key_123456"
+          TEST_KEYS.includes(authorization?.replace("Bearer ", ""))
         ) {
           return new Response(null, { status: 200 });
         }
         return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
+      },
+    },
+    {
+      name: "resource",
+      scriptPath: new URL("./resource-runtime-worker.mjs", import.meta.url).pathname,
+      modules: true,
+      compatibilityDate: "2026-11-17",
+      compatibilityFlags: ["nodejs_compat"],
+      bindings: {
+        MCP_SERVER_URL: MCP_RESOURCE,
+      },
+      serviceBindings: {
+        AUTH_SERVER: { name: "auth", entrypoint: "SyrianFatoraAuth" },
       },
     }],
   }));
@@ -223,12 +243,12 @@ async function beginAuthorization(client, verifier, scope = "mcp:read") {
   return { handle, cookie };
 }
 
-async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
+async function approveAuthorization(handle, cookie, scopes = ["mcp:read"], apiKey = TEST_KEYS[0]) {
   const outboundStart = outboundRequests.length;
   const body = new URLSearchParams({
     handle,
     decision: "approve",
-    api_key: "sk_test_runtime_only_key_123456",
+    api_key: apiKey,
   });
   for (const scope of scopes) body.append("scope", scope);
   const response = await request("/authorize", {
@@ -248,7 +268,7 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
   const outbound = observedOutbound.at(-1);
   assert.equal(outbound.method, "GET");
   assert.equal(outbound.path, "/api/public/v1/customers?per_page=1");
-  assert.equal(outbound.authorization, "Bearer sk_test_runtime_only_key_123456");
+  assert.equal(outbound.authorization, `Bearer ${apiKey}`);
   assert.equal(
     response.status,
     302,
@@ -328,6 +348,18 @@ test("token endpoint rejects a mismatched PKCE verifier", async () => {
   assert.equal(error.error, "invalid_grant");
 });
 
+async function resourceValidate(token) {
+  const response = await miniflare.dispatchFetch("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+  });
+  return response;
+}
+
 async function refreshToken(client, refreshToken) {
   return request("/oauth/token", {
     method: "POST",
@@ -352,6 +384,77 @@ async function revokeToken(client, token, hint = "refresh_token") {
     }),
   });
 }
+
+test("access and refresh tokens expire and resource-server validation reflects revocation", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-lifecycle-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier, "mcp:read offline_access");
+  const approval = await approveAuthorization(handle, cookie, ["mcp:read", "offline_access"]);
+  const redirect = new URL(approval.headers.get("Location"));
+  const code = redirect.searchParams.get("code");
+  assert.ok(code);
+
+  const issued = await exchangeCode(client, code, verifier);
+  assert.equal(issued.status, 200, await issued.clone().text());
+  const tokens = await issued.json();
+  assert.equal(tokens.expires_in, 60);
+  assert.ok(tokens.refresh_token);
+
+  const live = await resourceValidate(tokens.access_token);
+  assert.equal(live.status, 200, await live.clone().text());
+  const liveData = await live.json();
+  assert.equal(liveData.props.provider, "syrianfatora");
+  assert.equal(liveData.props.upstreamApiKey, TEST_KEYS[0]);
+
+  await new Promise((resolve) => setTimeout(resolve, 61_500));
+
+  const expiredAccess = await resourceValidate(tokens.access_token);
+  assert.equal(expiredAccess.status, 401, await expiredAccess.clone().text());
+
+  const expiredRefresh = await refreshToken(client, tokens.refresh_token);
+  assert.equal(expiredRefresh.status, 400, await expiredRefresh.clone().text());
+  const refreshError = await expiredRefresh.json();
+  assert.equal(refreshError.error, "invalid_grant");
+});
+
+test("resource-server validation isolates grants by their stored upstream credentials", async () => {
+  const clientA = await registerPublicClient();
+  const clientB = await registerPublicClient();
+  const verifierA = "runtime-tenant-a-verifier-that-is-long-enough";
+  const verifierB = "runtime-tenant-b-verifier-that-is-long-enough";
+
+  const consentA = await beginAuthorization(clientA, verifierA);
+  const approvalA = await approveAuthorization(consentA.handle, consentA.cookie, ["mcp:read"], TEST_KEYS[0]);
+  const codeA = new URL(approvalA.headers.get("Location")).searchParams.get("code");
+  const tokenA = await exchangeCode(clientA, codeA, verifierA);
+  assert.equal(tokenA.status, 200, await tokenA.clone().text());
+  const tokensA = await tokenA.json();
+
+  const consentB = await beginAuthorization(clientB, verifierB);
+  const approvalB = await approveAuthorization(consentB.handle, consentB.cookie, ["mcp:read"], TEST_KEYS[1]);
+  const codeB = new URL(approvalB.headers.get("Location")).searchParams.get("code");
+  const tokenB = await exchangeCode(clientB, codeB, verifierB);
+  assert.equal(tokenB.status, 200, await tokenB.clone().text());
+  const tokensB = await tokenB.json();
+
+  const responseA = await resourceValidate(tokensA.access_token);
+  const responseB = await resourceValidate(tokensB.access_token);
+  assert.equal(responseA.status, 200, await responseA.clone().text());
+  assert.equal(responseB.status, 200, await responseB.clone().text());
+  const dataA = await responseA.json();
+  const dataB = await responseB.json();
+  assert.equal(dataA.props.upstreamApiKey, TEST_KEYS[0]);
+  assert.equal(dataB.props.upstreamApiKey, TEST_KEYS[1]);
+  assert.notEqual(dataA.props.grantSubject, dataB.props.grantSubject);
+
+  const revoked = await revokeToken(clientA, tokensA.access_token, "access_token");
+  assert.equal(revoked.status, 200, await revoked.clone().text());
+
+  const revokedA = await resourceValidate(tokensA.access_token);
+  const stillValidB = await resourceValidate(tokensB.access_token);
+  assert.equal(revokedA.status, 401, await revokedA.clone().text());
+  assert.equal(stillValidB.status, 200, await stillValidB.clone().text());
+});
 
 test("refresh tokens rotate and the previous refresh token is rejected", async () => {
   const client = await registerPublicClient();
