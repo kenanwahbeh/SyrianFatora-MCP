@@ -165,3 +165,14 @@ Not yet verified: build checks, Worker runtime behavior, cross-Worker Durable Ob
 ### Preview configuration correction (2026-11-18)
 
 The first CI build rejected Wrangler's top-level previews property because this repository uses the typed cf/config API. Both Worker configs now use defineConfig(({ isPreview }) => ...) and omit the RATE_LIMITER binding for Preview builds. Preview requests therefore fail closed before any SyrianFatora upstream call. The Preview command for this toolchain is cf previews deploy; do not use npx wrangler preview against these cf/config projects.
+
+## SyrianFatora quota findings (2026-11-18)
+
+Official developer documentation states:
+- Daily quota: 1,000 successful requests per workspace by default; can be raised on request.
+- Paid plans: additional monthly quota measured by billing cycle; public docs do not state one universal monthly limit.
+- Response headers: X-RateLimit-Limit and X-RateLimit-Remaining; 429 responses include Retry-After.
+
+Source: https://syrianfatora.com/developers
+
+The current local coordinator groups by API-key fingerprint, not workspace identity. It therefore shares quota across grants using the same key, but cannot yet unify multiple different keys belonging to the same workspace. Before production, confirm one key per workspace or obtain a stable workspace identifier from the provider. Set the local daily threshold from the actual workspace limit; do not assume the default if the workspace limit was raised.
