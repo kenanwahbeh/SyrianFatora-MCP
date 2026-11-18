@@ -37,9 +37,11 @@ export default defineConfig(({ isPreview }) => ({
 					exportName: "CredentialRateLimiter",
 				}),
 			}),
-			AUTH_SERVER: bindings.worker({
-				worker: isPreview ? "syrianfatora-auth-preview" : "syrianfatora-auth",
-				exportName: "SyrianFatoraAuth",
+			...(isPreview ? {} : {
+				AUTH_SERVER: bindings.worker({
+					worker: "syrianfatora-auth",
+					exportName: "SyrianFatoraAuth",
+				}),
 			}),
 		},
 	},
