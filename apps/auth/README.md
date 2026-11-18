@@ -67,3 +67,11 @@ Set finite positive integer values only after verifying the SyrianFatora quota a
 Set the secret RATE_LIMIT_HMAC_SECRET on both Workers to the exact same random value of at least 32 bytes. It is used only to derive HMAC-SHA-256 identities; raw API keys, IP addresses and OAuth grant subjects are not stored as limiter identifiers. Never commit the secret.
 
 The Preview configuration intentionally does not bind a production limiter. Preview requests that reach an upstream call fail closed; do not connect Preview to production quota or customer data.
+
+## SyrianFatora provider quota reference
+
+The official developer documentation states a default daily quota of 1,000 successful requests per workspace, which can be increased on request. Paid plans add a monthly quota measured by the billing cycle; the public documentation does not publish one universal monthly number. Responses include X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses include Retry-After.
+
+Source: https://syrianfatora.com/developers
+
+Configure RATE_LIMIT_CREDENTIAL_MAX_REQUESTS to the confirmed workspace daily allowance and RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS to the chosen conservative local guard window. The current coordinator is keyed by API-key fingerprint. Because the provider describes its quota as workspace-wide, multiple API keys belonging to one workspace would currently receive separate local counters. Production use therefore requires confirming one API key per workspace or obtaining a stable workspace identifier from the provider and changing the limiter identity.
