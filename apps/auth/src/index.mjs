@@ -124,13 +124,17 @@ async function authorize(request, workerEnv) {
     form.getAll("scope").map(String),
     SUPPORTED_SCOPES,
   );
-  const apiKey = String(form.get("api_key") ?? "").trim();
-  await enforceAuthorizationRateLimit(request, apiKey, workerEnv);
-  await validateSyrianFatoraKey(apiKey);
 
+  // Consume and validate the browser-bound consent transaction before making
+  // any outbound request. A forged, expired, replayed, or cross-browser handle
+  // must never trigger upstream credential validation.
   const approved = await oauth.approveConsent(request, handle, {
     scope: selectedScopes,
   });
+
+  const apiKey = String(form.get("api_key") ?? "").trim();
+  await enforceAuthorizationRateLimit(request, apiKey, workerEnv);
+  await validateSyrianFatoraKey(apiKey);
 
   // The provider encrypts props at rest and returns them only to the resource server.
   // This random subject identifies this grant; it is not an upstream account identifier.

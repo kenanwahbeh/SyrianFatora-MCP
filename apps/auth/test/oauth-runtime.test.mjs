@@ -247,6 +247,26 @@ async function exchangeCode(client, code, verifier) {
   });
 }
 
+test("invalid consent handles are rejected before any upstream credential validation", async () => {
+  const outboundStart = outboundRequests.length;
+  const response = await request("/authorize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "CF-Connecting-IP": "192.0.2.11",
+      Cookie: "oauth_consent=invalid-binding",
+    },
+    body: new URLSearchParams({
+      handle: "definitely-invalid-consent-handle",
+      decision: "approve",
+      api_key: "sk_test_runtime_only_key_123456",
+      scope: "mcp:read",
+    }),
+  });
+  assert.equal(response.status, 400);
+  assert.equal(outboundRequests.length, outboundStart);
+});
+
 test("approval validates a synthetic key through the isolated outbound mock and issues an authorization code", async () => {
   const client = await registerPublicClient();
   const verifier = "runtime-approval-verifier-that-is-long-enough";
