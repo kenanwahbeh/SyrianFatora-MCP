@@ -24,6 +24,10 @@ export default defineConfig({
 		env: {
 			MCP_SERVER_URL: bindings.text("https://replace-with-mcp-preview-host.invalid/mcp"),
 			AUTH_SERVER_URL: bindings.text("https://replace-with-auth-preview-host.invalid"),
+			RATE_LIMITER: bindings.durableObject({
+				worker: "syrianfatora-auth-preview",
+				exportName: "CredentialRateLimiter",
+			}),
 			AUTH_SERVER: bindings.worker({
 				worker: "syrianfatora-auth-preview",
 				exportName: "SyrianFatoraAuth",
