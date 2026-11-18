@@ -57,7 +57,7 @@ test("validates the key using a read-only customers request", async () => {
   assert.equal(observed.url, `${SYRIANFATORA_API_BASE}/customers?per_page=1`);
   assert.equal(observed.options.method, "GET");
   assert.equal(observed.options.headers.Authorization, "Bearer sk_live_test_key_value_123456");
-  assert.equal(observed.options.redirect, "error");
+  assert.equal(observed.options.redirect, "manual");
 });
 
 test("rejects invalid credentials without exposing the supplied key", async () => {

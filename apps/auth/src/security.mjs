@@ -131,7 +131,7 @@ export async function validateSyrianFatoraKey(apiKey, fetchImpl = fetch) {
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
-      redirect: "error",
+      redirect: "manual",
       ...(signal ? { signal } : {}),
     });
   } catch {
