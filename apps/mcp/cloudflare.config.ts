@@ -26,6 +26,10 @@ export default defineConfig(({ isPreview }) => ({
 			),
 			RATE_LIMIT_HMAC_SECRET: bindings.secret(),
 			...(isPreview ? {
+				RATE_LIMITER: bindings.durableObject({
+					worker: "syrianfatora-auth-preview",
+					exportName: "CredentialRateLimiter",
+				}),
 				AUTH_SERVER: bindings.worker({
 					worker: "syrianfatora-auth-preview",
 					exportName: "SyrianFatoraAuth",
