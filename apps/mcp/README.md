@@ -49,3 +49,11 @@ The current source does not yet implement this control. Production deployment is
 ## Build and testing
 
 `npm run build:check` validates the Worker build without deploying; `npm test` runs unit tests. The user has deferred automated tests for the immediate production migration. Do not describe this as successful end-to-end OAuth verification. Use only safe, read-only production probes.
+
+## Enforced shared rate limiting
+
+Before every upstream SyrianFatora fetch, the handler calls the shared CredentialRateLimiter Durable Object exported by syrianfatora-auth-preview. It atomically checks the credential-wide sliding window and the per-grant sliding window. The credential-wide counter is shared with the authorization Worker, so multiple grants cannot multiply one workspace's allowance.
+
+The MCP Worker requires the same RATE_LIMIT_HMAC_SECRET value as the authorization Worker. If the Durable Object binding, secret, grant identity or coordinator is unavailable, the handler returns a controlled 503 and does not call SyrianFatora. Quota exhaustion returns 429 with Retry-After.
+
+An upstream 429 is recorded as a per-credential cooldown using the provider's Retry-After value, or the configured fallback cooldown. The handler never retries the upstream request automatically.
