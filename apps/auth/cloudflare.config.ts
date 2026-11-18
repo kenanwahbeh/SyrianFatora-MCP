@@ -30,7 +30,12 @@ export default defineConfig(({ isPreview }) => ({
 					? "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
-			...(isPreview ? {} : {
+			...(isPreview ? {
+				RATE_LIMITER: bindings.durableObject({
+					worker: "syrianfatora-auth-preview",
+					exportName: "CredentialRateLimiter",
+				}),
+			} : {
 				RATE_LIMITER: bindings.durableObject({
 					worker: "syrianfatora-auth",
 					exportName: "CredentialRateLimiter",
@@ -38,9 +43,10 @@ export default defineConfig(({ isPreview }) => ({
 			}),
 			OAUTH_KV: bindings.kv({
 				id: isPreview
-					? "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+					? "6565df7797504ac882ef39c009626866"
 					: "d19d9bd755c349f688cd55e299b8168f",
 			}),
+			RATE_LIMIT_HMAC_SECRET: bindings.secret(),
 		},
 	},
 }));
