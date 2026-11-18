@@ -1,6 +1,6 @@
 import { bindings, defineConfig, exports } from "cf/config";
 
-export default defineConfig({
+export default defineConfig(({ isPreview }) => ({
 	worker: {
 		name: "syrianfatora-auth-preview",
 		compatibilityDate: "2026-11-17",
@@ -13,7 +13,6 @@ export default defineConfig({
 			CredentialRateLimiter: exports.durableObject({ storage: "sqlite" }),
 		},
 		workersDev: true,
-		previews: {},
 		observability: {
 			enabled: true,
 			logs: {
@@ -28,13 +27,15 @@ export default defineConfig({
 		env: {
 			ISSUER: bindings.text("https://replace-with-auth-preview-host.invalid"),
 			MCP_SERVER_URL: bindings.text("https://replace-with-mcp-preview-host.invalid/mcp"),
-			RATE_LIMITER: bindings.durableObject({
-				worker: "syrianfatora-auth-preview",
-				exportName: "CredentialRateLimiter",
+			...(isPreview ? {} : {
+				RATE_LIMITER: bindings.durableObject({
+					worker: "syrianfatora-auth-preview",
+					exportName: "CredentialRateLimiter",
+				}),
 			}),
 			OAUTH_KV: bindings.kv({
 				id: "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID",
 			}),
 		},
 	},
-});
+}));
