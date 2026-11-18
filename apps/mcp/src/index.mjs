@@ -13,7 +13,10 @@ const resourceServer = new OAuthResourceServer({
   },
   // Advertised to clients; enforced explicitly in the handler below.
   requiredScopes: ["mcp:read"],
-  validateToken: (workerEnv) => workerEnv.AUTH_SERVER.validateToken,
+  // Preview intentionally has no Auth service binding. Returning a validator that
+  // rejects every token keeps the Preview isolated and fail-closed; production
+  // continues to use the real Auth Worker service binding.
+  validateToken: (workerEnv) => workerEnv.AUTH_SERVER?.validateToken ?? (async () => null),
   handler: {
     fetch(request, workerEnv, ctx) {
       if (!ctx.auth.scope.includes("mcp:read")) {

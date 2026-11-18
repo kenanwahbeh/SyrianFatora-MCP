@@ -7,7 +7,7 @@
 
 Migrate the existing Cloudflare MCP resource Worker in place. Keep the exact production service name `syrianfatora-mcp`, preserve its public MCP endpoint identity and its 51 tools. Add a separate OAuth authorization Worker named `syrianfatora-auth`, connected by Service Binding `AUTH_SERVER` → `SyrianFatoraAuth`. Do not create a replacement MCP Worker.
 
-The user has asked to defer automated tests for this immediate migration. This is a recorded exception, not a passing test result. Only read-only production probes are permitted.
+PR #14 adds focused Auth and MCP rate-limit client tests, and both package build/test workflows pass for the tested code commit. Direct Durable Object SQLite atomicity/concurrency tests remain outstanding. Only read-only production probes are permitted.
 
 ## Current production baseline — read-only inspection
 
@@ -69,18 +69,15 @@ No successful production overwrite was reported from this failed build. Do not t
 
 ## Mandatory rate-limit blocker
 
-The current OAuth source has no explicit rate-limit gate:
-- `apps/auth/src/index.mjs` invokes `validateSyrianFatoraKey(apiKey)` on an approval POST without a preceding limiter.
-- `apps/mcp/src/handler.mjs` forwards each accepted tool call upstream without a limiter.
+The source-level rate-limit gates are now implemented on PR #14:
+1. Auth approval checks IP and credential-attempt buckets, then the shared credential budget, before calling `validateSyrianFatoraKey`.
+2. MCP applies a shared credential budget and per-grant window immediately before its only upstream fetch.
+3. Auth and MCP production configs bind to the same `syrianfatora-auth` / `CredentialRateLimiter` SQLite Durable Object class.
+4. The coordinator checks all requested buckets and inserts accepted events inside `transactionSync()`.
+5. Missing bindings/configuration, coordinator failures, and inability to record an upstream 429 cooldown fail closed.
+6. Upstream 429 and Retry-After are recorded as a per-credential cooldown; no automatic retry is performed.
 
-Do not deploy this source to production until the following controls are implemented:
-1. Approval POST gate before credential validation.
-2. Per-IP/edge attempt gate plus credential-fingerprint attempt gate.
-3. Strict per-credential budget shared by auth validation and MCP proxy calls, coordinated by a Durable Object keyed by a server-side HMAC fingerprint.
-4. Per-grant burst protection.
-5. Fail-closed behavior when the strict limiter is unavailable.
-6. Upstream 429 / Retry-After handling and per-credential cooldown.
-7. Finite thresholds selected from verified SyrianFatora quota information; do not invent a provider limit.
+Production deployment remains blocked until finite runtime limits are selected from verified workspace quota information, identical HMAC secrets are provisioned in both Workers, generated migration metadata and deployed bindings are verified, and direct Durable Object atomicity/concurrency tests pass. The local key identity is the API-key fingerprint: different API keys for one upstream workspace are not aggregated. Preview omits the limiter binding and therefore fails closed.
 
 Cloudflare Workers Rate Limiting bindings are suitable for approximate per-location edge/burst gates only. They are not a strict global quota mechanism. The Durable Object coordinator is required for the shared per-credential upstream budget.
 
@@ -122,7 +119,7 @@ The docs-only branch/PR does not match the trigger's included paths, so these do
 
 ## Execution log
 
-| 2026-11-18 | Reviewed rate-limit concern against current auth and MCP source | Confirmed missing: approval POST validates API key without a limiter; MCP handler proxies upstream without a limiter. Added a mandatory production blocker to security, architecture, implementation plan, and this runbook. No code enforcement added yet. |
+| 2026-11-18 | PR #14 source audit | Confirmed Auth/MCP Durable Object binding topology, shared same-key HMAC identity, MCP upstream gate, and fail-closed behavior. Added focused client tests and updated architecture/security/implementation documentation. Production settings and SQLite atomicity/concurrency remain unverified. |
 
 | Time (UTC) | Action | Result |
 | --- | --- | --- |
@@ -169,7 +166,7 @@ The first CI build rejected Wrangler's top-level previews property because this 
 ## SyrianFatora quota findings (2026-11-18)
 
 Official developer documentation states:
-- Daily quota: 1,000 successful requests per workspace by default; can be raised on request.
+- Daily quota: 1,000 requests per workspace by default; can be raised on request. The documentation also says all requests, including 429 responses, are recorded in usage/audit logs; it does not establish that every 429 consumes the daily allowance.
 - Paid plans: additional monthly quota measured by billing cycle; public docs do not state one universal monthly limit.
 - Response headers: X-RateLimit-Limit and X-RateLimit-Remaining; 429 responses include Retry-After.
 
@@ -207,3 +204,16 @@ No deployment was performed by this configuration change.
 The dependency installation step also reported 5 high-severity npm audit findings. No automatic dependency remediation was applied; review the advisories and choose compatible fixes before production deployment.
 
 The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documentation-only changes do not start unnecessary builds. The main-branch production trigger remains unchanged.
+
+
+## PR #14 verification update (2026-11-18)
+
+- Branch: `security/rate-limit-audit-pr14`
+- PR: https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/14
+- No Cloudflare production resources, DNS, Worker routes, or deployments were changed.
+- Added `apps/auth/test/rate-limit-client.test.mjs` and `apps/mcp/test/rate-limit-client.test.mjs`.
+- Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: MCP run #59 and Auth run #74. Both completed dependency installation, `npm run build:check`, and `npm test`.
+- The test suites mock the Durable Object namespace. They do not prove SQLite transaction behavior or true concurrent request serialization.
+- Both production configs point to the same DO class in source. The repository cannot prove that production bindings are deployed or that `RATE_LIMIT_HMAC_SECRET` has identical bytes in both Workers.
+- Preview deliberately omits `RATE_LIMITER`; rate-limited operations fail closed there.
+- Distinct API keys belonging to the same SyrianFatora workspace still map to distinct local quota identities. Do not claim workspace-wide aggregation across different keys.

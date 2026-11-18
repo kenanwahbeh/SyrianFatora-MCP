@@ -4,7 +4,7 @@
 
 Migrate the **existing production MCP Worker in place**. Keep its exact Cloudflare service name `syrianfatora-mcp`, public MCP identity, and 51-tool catalogue. Do not create a replacement MCP Worker. A separate `syrianfatora-auth` authorization Worker is required by Workers OAuth Provider v1 and connects to the existing MCP Worker through a Service Binding.
 
-The user has directed that automated tests be deferred for this immediate migration. This is a testing exception, not a claim that tests passed. No production write-operation tests are allowed.
+PR #14 adds focused Auth and MCP rate-limit client tests and both package CI workflows pass. Direct Durable Object SQLite atomicity/concurrency tests remain outstanding. No production write-operation tests are allowed.
 
 ## Phase 0 — Existing state and build pipeline
 
@@ -60,23 +60,23 @@ The user has directed that automated tests be deferred for this immediate migrat
 
 ## Phase 5 — Rate limiting and upstream quota protection (production blocker)
 
-- [ ] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
-- [ ] Add a per-IP/edge abuse gate and repeated credential-fingerprint attempt gate for `POST /authorize`.
-- [ ] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
-- [ ] Implement the strict coordinator with a Durable Object; atomically check and charge before every upstream request, including concurrent requests and requests from different Cloudflare locations.
-- [ ] Add per-grant burst limits for MCP clients; do not rely on random grant IDs as the only quota identity.
-- [ ] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
-- [ ] Honor SyrianFatora 429 and Retry-After; add per-credential cooldown/circuit breaker and disable automatic quota-exhausting retries.
-- [ ] Set finite configurable thresholds using verified SyrianFatora quota information and legitimate usage assumptions; document values and rationale. No quota values are currently confirmed.
-- [ ] Verify that multiple OAuth grants using the same upstream credential share one quota budget.
-- [ ] Verify rate-limit rejection paths do not call the upstream API.
+- [x] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
+- [x] Add IP and repeated credential-fingerprint attempt gates for `POST /authorize`.
+- [x] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
+- [x] Implement the coordinator as a SQLite-backed Durable Object; multi-bucket checks and inserts run in `transactionSync()`. Direct concurrency/atomicity tests remain outstanding.
+- [x] Add per-grant sliding-window limits for MCP clients in addition to the shared credential bucket.
+- [x] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
+- [x] Honor SyrianFatora 429 and Retry-After; record per-credential cooldown without automatic retries.
+- [ ] Set finite configurable thresholds using the actual workspace quota and legitimate usage assumptions; no values are guessed.
+- [x] Source-level identity check confirms grants using the same API key target the same credential Durable Object. Different API keys are not aggregated to a workspace identity.
+- [x] Source-level handler check confirms every MCP upstream fetch is preceded by the limiter gate; rejection paths do not call upstream.
 
 ## Phase 6 — Credential lifecycle and follow-up hardening
 
 - [ ] Implement credential replacement.
 - [ ] Implement user disconnect and OAuth grant revocation.
 - [ ] Confirm credential deletion/invalidation behavior and tenant isolation.
-- [ ] Restore automated unit/integration/security tests before subsequent feature releases.
+- [ ] Add direct Durable Object unit/integration tests for SQLite transaction atomicity and concurrent consumption before production enablement.
 - [ ] Verify refresh-token behavior only if the client lifecycle requires it.
 
 ## Production safety and stop conditions
@@ -93,7 +93,7 @@ The user has directed that automated tests be deferred for this immediate migrat
 
 ## Testing exception
 
-Automated tests are deferred for the immediate production migration at the user's direction. The implementation plan must not mark deferred tests as passed. Use read-only operational probes and record unverified runtime behavior. Testing becomes a release gate again for later feature work.
+PR #14 adds Auth and MCP rate-limit client tests. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: each completed dependency installation, `npm run build:check`, and `npm test`. These tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or concurrent consumption. Direct Durable Object tests and read-only production configuration checks remain release gates. Never run write-operation tests against a real customer workspace.
 
 ## Rate-limiting implementation
 
@@ -103,16 +103,18 @@ Automated tests are deferred for the immediate production migration at the user'
 - [x] Use keyed HMAC-SHA-256 identities; never persist raw credentials, IP addresses or grant subjects in limiter storage.
 - [x] Fail closed when configuration or the coordinator is unavailable; return controlled 429/503 responses.
 - [x] Record upstream 429 cooldowns and honor Retry-After without automatic retries.
-- [ ] Confirm provider quota and configure finite runtime thresholds.
+- [ ] Confirm this workspace's actual provider quota and configure finite runtime thresholds.
 - [ ] Set the identical HMAC secret on both Workers.
-- [ ] Run build checks and safe preview verification.
-- [ ] Complete operational verification before production rollout.
+- [x] Run CI build checks and package tests for the initial source commit.
+- [x] Add focused Auth and MCP rate-limit client tests; latest CI results are recorded in the PR and audit log.
+- [ ] Add direct Durable Object SQLite atomicity/concurrency tests and complete safe preview verification.
+- [ ] Complete operational verification before production rollout, including deployed bindings, identical HMAC secret provisioning, and generated migration metadata.
 
 The implementation is committed to source; the unchecked items remain production blockers.
 
 ## Provider quota confirmation
 
-- [x] Confirmed from the official SyrianFatora developer documentation: default 1,000 successful requests per workspace per day; daily limit may be increased on request.
+- [x] Confirmed from the official SyrianFatora developer documentation: default daily quota is 1,000 requests per workspace; it may be increased on request. The documentation also says requests, including 429 responses, are recorded in usage/audit logs; this does not establish whether every 429 consumes the daily allowance.
 - [x] Confirmed paid plans add a monthly quota measured by billing cycle; no universal public numeric value is published.
 - [x] Confirmed response headers X-RateLimit-Limit and X-RateLimit-Remaining and 429 Retry-After.
 - [ ] Confirm this workspace's actual daily limit and plan-specific monthly quota.

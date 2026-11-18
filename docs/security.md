@@ -45,13 +45,13 @@ Rate limiting is a **mandatory production release gate**, not an optional harden
 - Cloudflare Workers Rate Limiting bindings may provide a fast edge gate for IP-level authorization attempts and per-grant burst protection. Their counters are approximate and local to each Cloudflare location; they are **not** a strict global or per-workspace quota control.
 - A Durable Object keyed by the keyed credential fingerprint is the required strict shared coordinator for each upstream SyrianFatora credential. It must atomically check and charge the credential budget before allowing a proxy call, coordinate concurrent requests, and persist the rolling/window counter and cooldown state.
 - Set finite thresholds from the actual SyrianFatora API quota and expected legitimate client usage. Do not invent provider limits. If the upstream quota is unknown, use conservative configurable caps and obtain an explicit reviewed budget before production enablement; do not ship with an unlimited or disabled limiter.
-- The same credential-level budget must cover both `validateSyrianFatoraKey` and all MCP upstream calls. Keep authorization-attempt/IP limits as an additional abuse control, not a substitute for credential-level quota accounting.
+- The same credential-level budget must cover both `validateSyrianFatoraKey` and all MCP upstream calls. Keep authorization-attempt/IP limits as an additional abuse control, not a substitute for credential-level quota accounting. The current identity is a keyed API-key fingerprint: it unifies grants that use the same key, but does not aggregate different keys belonging to one workspace.
 
 ### Current implementation status
 
 The source now enforces these gates: the authorization approval POST passes IP and credential-attempt checks plus the shared credential budget before validateSyrianFatoraKey; every MCP upstream fetch passes the same credential budget and a per-grant burst window. The coordinator is a SQLite-backed Durable Object exported by the authorization Worker and bound into the MCP Worker. Counters use sliding windows and keyed HMAC identities; raw API keys, IP addresses and grant subjects are not stored by the limiter.
 
-This is source implementation, not production verification. Finite thresholds are deliberately mandatory runtime configuration and have not been invented; missing configuration or an unavailable coordinator fails closed. Production rollout remains blocked until the actual SyrianFatora quota is confirmed, identical HMAC secrets are installed on both Workers, the runtime configuration is set, and build/preview and operational checks are completed.
+This is source implementation, not production verification. Finite thresholds are mandatory runtime configuration and have not been invented; missing configuration or an unavailable coordinator fails closed. Both production configs point at the same Durable Object class. Preview omits the limiter binding and therefore fails closed for upstream calls. Production rollout remains blocked until the actual SyrianFatora quota is confirmed, identical HMAC secrets are installed on both Workers, the runtime configuration is set, generated migration metadata and deployed bindings are verified, and direct Durable Object atomicity/concurrency tests are completed.
 
 ## Production migration safeguards
 
@@ -67,7 +67,7 @@ This is source implementation, not production verification. Finite thresholds ar
 
 ## Testing exception
 
-For the immediate production migration, the user has directed that automated tests be deferred. This is a documented risk exception, **not** a test pass or a waiver of security controls. Preserve the current known-good production version for rollback, use read-only probes only, and record all unverified behavior in the migration log. Restore automated and end-to-end testing before later feature changes.
+PR #14 adds focused Node tests for the Auth and MCP rate-limit clients. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: Auth run #74 and MCP run #59 each passed dependency installation, `npm run build:check`, and `npm test`. The tests mock the Durable Object namespace and do not prove SQLite atomicity or real concurrent consumption. These client tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or real concurrent consumption. Direct Durable Object tests and production read-only configuration verification remain release gates. No production write-operation tests are allowed.
 
 ## Incident response
 
@@ -75,6 +75,6 @@ If a key is exposed, revoke it in SyrianFatora, invalidate related OAuth grants,
 
 ## Upstream quota facts and identity caveat
 
-SyrianFatora's official developer documentation specifies a default daily quota of 1,000 successful requests per workspace, which can be increased on request. Paid plans add a monthly quota tied to the billing cycle; the public documentation does not specify one universal monthly value. Responses expose X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses expose Retry-After. Source: https://syrianfatora.com/developers
+SyrianFatora's official developer documentation specifies a default daily quota of 1,000 requests per workspace, which can be increased on request. The documentation says requests, including 429 responses, are recorded in workspace usage/audit logs; this audit-log statement should not be interpreted as proof that every 429 consumes the daily allowance. Paid plans add a monthly quota tied to the billing cycle; the public documentation does not specify one universal monthly value. Responses expose X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses expose Retry-After. Source: https://syrianfatora.com/developers
 
 The implementation currently coordinates usage by keyed API-credential fingerprint. This strictly shares usage across OAuth grants using the same key, but it does not merge multiple distinct API keys belonging to one workspace. Since the upstream quota is workspace-wide, production rollout must either enforce one active API key per workspace or obtain a stable workspace identifier from SyrianFatora and key the shared quota by that identity. Monthly plan limits remain enforced by the upstream provider; local cooldown handling honors its 429 Retry-After.
