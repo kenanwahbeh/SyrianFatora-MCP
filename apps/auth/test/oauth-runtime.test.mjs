@@ -303,6 +303,111 @@ test("token endpoint rejects a mismatched PKCE verifier", async () => {
   assert.equal(error.error, "invalid_grant");
 });
 
+async function refreshToken(client, refreshToken) {
+  return request("/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: client.client_id,
+      resource: MCP_RESOURCE,
+    }),
+  });
+}
+
+async function revokeToken(client, token, hint = "refresh_token") {
+  return request("/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      token,
+      token_type_hint: hint,
+      client_id: client.client_id,
+    }),
+  });
+}
+
+test("refresh tokens rotate and the previous refresh token is rejected", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-refresh-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier, "mcp:read offline_access");
+  const approval = await approveAuthorization(handle, cookie, ["mcp:read", "offline_access"]);
+  const redirect = new URL(approval.headers.get("Location"));
+  const code = redirect.searchParams.get("code");
+  assert.ok(code);
+
+  const first = await exchangeCode(client, code, verifier);
+  assert.equal(first.status, 200, await first.clone().text());
+  const firstTokens = await first.json();
+  assert.ok(firstTokens.refresh_token);
+
+  const refreshed = await refreshToken(client, firstTokens.refresh_token);
+  assert.equal(refreshed.status, 200, await refreshed.clone().text());
+  const secondTokens = await refreshed.json();
+  assert.ok(secondTokens.refresh_token);
+  assert.notEqual(secondTokens.refresh_token, firstTokens.refresh_token);
+
+  // The provider deliberately accepts the immediately previous refresh token
+  // once, which closes a concurrent-refresh race without allowing indefinite replay.
+  const previous = await refreshToken(client, firstTokens.refresh_token);
+  assert.equal(previous.status, 200, await previous.clone().text());
+  const thirdTokens = await previous.json();
+  assert.ok(thirdTokens.refresh_token);
+  assert.notEqual(thirdTokens.refresh_token, secondTokens.refresh_token);
+
+  // Rotate once more with the current token. The original token is now outside
+  // the one-token concurrency grace window and must fail.
+  const fourth = await refreshToken(client, thirdTokens.refresh_token);
+  assert.equal(fourth.status, 200, await fourth.clone().text());
+  const fourthTokens = await fourth.json();
+  assert.ok(fourthTokens.refresh_token);
+
+  const replay = await refreshToken(client, firstTokens.refresh_token);
+  assert.equal(replay.status, 400, await replay.clone().text());
+  const replayError = await replay.json();
+  assert.equal(replayError.error, "invalid_grant");
+});
+
+test("revoking a refresh token revokes the grant and blocks further refresh", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-revocation-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier, "mcp:read offline_access");
+  const approval = await approveAuthorization(handle, cookie, ["mcp:read", "offline_access"]);
+  const redirect = new URL(approval.headers.get("Location"));
+  const code = redirect.searchParams.get("code");
+  assert.ok(code);
+
+  const issued = await exchangeCode(client, code, verifier);
+  assert.equal(issued.status, 200, await issued.clone().text());
+  const tokens = await issued.json();
+  assert.ok(tokens.refresh_token);
+
+  const revoked = await revokeToken(client, tokens.refresh_token);
+  assert.equal(revoked.status, 200, await revoked.clone().text());
+
+  const refreshAfterRevoke = await refreshToken(client, tokens.refresh_token);
+  assert.equal(refreshAfterRevoke.status, 400, await refreshAfterRevoke.clone().text());
+  const error = await refreshAfterRevoke.json();
+  assert.equal(error.error, "invalid_grant");
+});
+
+test("authorization code is bound to its client and cannot be exchanged by another client", async () => {
+  const clientA = await registerPublicClient();
+  const clientB = await registerPublicClient();
+  const verifier = "runtime-client-binding-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(clientA, verifier);
+  const approval = await approveAuthorization(handle, cookie);
+  const redirect = new URL(approval.headers.get("Location"));
+  const code = redirect.searchParams.get("code");
+  assert.ok(code);
+
+  const response = await exchangeCode(clientB, code, verifier);
+  assert.equal(response.status, 400, await response.clone().text());
+  const error = await response.json();
+  assert.equal(error.error, "invalid_grant");
+});
+
 test("authorization codes cannot be redeemed more than once", async () => {
   const client = await registerPublicClient();
   const verifier = "runtime-replay-verifier-that-is-long-enough";
