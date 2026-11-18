@@ -9,6 +9,7 @@ export default defineConfig({
 		],
 		entrypoint: "src/index.mjs",
 		workersDev: true,
+		previews: {},
 		observability: {
 			enabled: true,
 			logs: {
