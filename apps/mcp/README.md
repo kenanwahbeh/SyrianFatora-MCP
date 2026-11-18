@@ -57,3 +57,11 @@ Before every upstream SyrianFatora fetch, the handler calls the shared Credentia
 The MCP Worker requires the same RATE_LIMIT_HMAC_SECRET value as the authorization Worker. If the Durable Object binding, secret, grant identity or coordinator is unavailable, the handler returns a controlled 503 and does not call SyrianFatora. Quota exhaustion returns 429 with Retry-After.
 
 An upstream 429 is recorded as a per-credential cooldown using the provider's Retry-After value, or the configured fallback cooldown. The handler never retries the upstream request automatically.
+
+## Upstream quota scope
+
+SyrianFatora documents a default daily quota of 1,000 successful requests per workspace, with increases available on request, plus a plan-dependent monthly quota for paid plans. The provider returns X-RateLimit-Limit and X-RateLimit-Remaining on responses and Retry-After on 429. The local limiter is an additional conservative gate; the provider remains authoritative for the monthly plan quota.
+
+Important: the current local budget is keyed by API-key fingerprint, while the provider describes its quota as workspace-wide. Do not issue multiple API keys for one workspace through this integration until a stable workspace identity is available or the keys are otherwise grouped under one limiter identity.
+
+Provider documentation: https://syrianfatora.com/developers
