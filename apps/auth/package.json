@@ -8,6 +8,7 @@
     "dev": "cf dev",
     "build": "cf build",
     "build:check": "cf build",
+    "pretest": "cf build",
     "test": "node --test"
   },
   "dependencies": {
