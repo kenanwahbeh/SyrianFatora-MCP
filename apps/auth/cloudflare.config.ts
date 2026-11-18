@@ -22,12 +22,12 @@ export default defineConfig(({ isPreview }) => ({
 		env: {
 			ISSUER: bindings.text(
 				isPreview
-					? "https://test-durable-object-atomicity-syrianfatora-auth-preview.kinan-api.workers.dev"
+					? "https://fix-preview-oauth-endpoints-syrianfatora-auth-preview.kinan-api.workers.dev"
 					: "https://replace-with-auth-production-host.invalid",
 			),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
-					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
+					? "https://fix-preview-oauth-endpoints-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
 			ACCESS_TOKEN_TTL_SECONDS: bindings.text("3600"),
