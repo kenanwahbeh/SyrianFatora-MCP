@@ -2,7 +2,7 @@ import { bindings, defineConfig } from "cf/config";
 
 export default defineConfig(({ isPreview }) => ({
 	worker: {
-		name: "syrianfatora-mcp-oauth-preview",
+		name: isPreview ? "syrianfatora-mcp-oauth-preview" : "syrianfatora-mcp",
 		compatibilityDate: "2026-11-17",
 		compatibilityFlags: [
 			"nodejs_compat",
@@ -21,16 +21,24 @@ export default defineConfig(({ isPreview }) => ({
 			},
 		},
 		env: {
-			MCP_SERVER_URL: bindings.text("https://replace-with-mcp-preview-host.invalid/mcp"),
-			AUTH_SERVER_URL: bindings.text("https://replace-with-auth-preview-host.invalid"),
+			MCP_SERVER_URL: bindings.text(
+				isPreview
+					? "https://replace-with-mcp-preview-host.invalid/mcp"
+					: "https://replace-with-mcp-production-host.invalid/mcp",
+			),
+			AUTH_SERVER_URL: bindings.text(
+				isPreview
+					? "https://replace-with-auth-preview-host.invalid"
+					: "https://replace-with-auth-production-host.invalid",
+			),
 			...(isPreview ? {} : {
 				RATE_LIMITER: bindings.durableObject({
-					worker: "syrianfatora-auth-preview",
+					worker: "syrianfatora-auth",
 					exportName: "CredentialRateLimiter",
 				}),
 			}),
 			AUTH_SERVER: bindings.worker({
-				worker: "syrianfatora-auth-preview",
+				worker: isPreview ? "syrianfatora-auth-preview" : "syrianfatora-auth",
 				exportName: "SyrianFatoraAuth",
 			}),
 		},
