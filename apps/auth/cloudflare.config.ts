@@ -22,12 +22,12 @@ export default defineConfig(({ isPreview }) => ({
 		env: {
 			ISSUER: bindings.text(
 				isPreview
-					? "https://test-durable-object-atomicity-syrianfatora-auth-preview.kinan-api.workers.dev"
+					? "https://oauth-upstream-client-identification-syrianfatora-auth-preview.kinan-api.workers.dev"
 					: "https://replace-with-auth-production-host.invalid",
 			),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
-					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
+					? "https://oauth-upstream-client-identification-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
 			ACCESS_TOKEN_TTL_SECONDS: bindings.text("3600"),
@@ -35,13 +35,13 @@ export default defineConfig(({ isPreview }) => ({
 			CLIENT_REGISTRATION_TTL_SECONDS: bindings.text("7776000"),
 			...(isPreview ? {
 				// Isolated Preview-only test thresholds; these are not Production quotas.
-				RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS: bindings.text("100"),
+				RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS: bindings.text("7"),
 				RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: bindings.text("60"),
-				RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: bindings.text("100"),
+				RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: bindings.text("2"),
 				RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: bindings.text("60"),
-				RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: bindings.text("100"),
+				RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: bindings.text("10"),
 				RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS: bindings.text("60"),
-				RATE_LIMIT_GRANT_MAX_REQUESTS: bindings.text("100"),
+				RATE_LIMIT_GRANT_MAX_REQUESTS: bindings.text("5"),
 				RATE_LIMIT_GRANT_WINDOW_SECONDS: bindings.text("60"),
 				RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS: bindings.text("30"),
 			} : {}),

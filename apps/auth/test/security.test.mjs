@@ -57,6 +57,7 @@ test("validates the key using a read-only customers request", async () => {
   assert.equal(observed.url, `${SYRIANFATORA_API_BASE}/customers?per_page=1`);
   assert.equal(observed.options.method, "GET");
   assert.equal(observed.options.headers.Authorization, "Bearer sk_live_test_key_value_123456");
+  assert.equal(observed.options.headers["User-Agent"], "SyrianFatora-MCP/0.1 (+https://bytebalancetech.com)");
   assert.equal(observed.options.redirect, "manual");
 });
 
@@ -77,6 +78,19 @@ test("explains the minimum read permission on HTTP 403", async () => {
   await assert.rejects(
     () => validateSyrianFatoraKey("sk_live_test_key_value_123456", async () => new Response(null, { status: 403 })),
     (error) => error.code === "missing_permission" && error.status === 400,
+  );
+});
+
+test("distinguishes Cloudflare browser-signature blocks from missing API permissions", async () => {
+  await assert.rejects(
+    () => validateSyrianFatoraKey(
+      "sk_live_test_key_value_123456",
+      async () => new Response(JSON.stringify({ error_code: 1010, error_name: "browser_signature_banned" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+    (error) => error.code === "upstream_access_blocked" && error.status === 503,
   );
 });
 
