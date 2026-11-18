@@ -45,3 +45,25 @@ The approval POST must pass an enforced limiter before `validateSyrianFatoraKey`
 - Credential replacement and disconnect/revocation UX are not implemented yet.
 - Local Worker-runtime integration and full OAuth end-to-end behavior are not verified yet.
 - The user has deferred automated tests for the immediate production migration; this is not a passing test result.
+
+## Enforced rate-limit coordinator
+
+The authorization Worker exports the SQLite-backed CredentialRateLimiter Durable Object. It is the shared quota coordinator for authorization-key validation and MCP upstream calls.
+
+Required Worker variables on the authorization Worker:
+
+- RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS
+- RATE_LIMIT_AUTH_IP_WINDOW_SECONDS
+- RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS
+- RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS
+- RATE_LIMIT_CREDENTIAL_MAX_REQUESTS
+- RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS
+- RATE_LIMIT_GRANT_MAX_REQUESTS
+- RATE_LIMIT_GRANT_WINDOW_SECONDS
+- RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS
+
+Set finite positive integer values only after verifying the SyrianFatora quota and expected legitimate use. No default or guessed quota is embedded in the code. Missing or invalid values cause the limiter to fail closed with HTTP 503.
+
+Set the secret RATE_LIMIT_HMAC_SECRET on both Workers to the exact same random value of at least 32 bytes. It is used only to derive HMAC-SHA-256 identities; raw API keys, IP addresses and OAuth grant subjects are not stored as limiter identifiers. Never commit the secret.
+
+The Preview configuration intentionally does not bind a production limiter. Preview requests that reach an upstream call fail closed; do not connect Preview to production quota or customer data.
