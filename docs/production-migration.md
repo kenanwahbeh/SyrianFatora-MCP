@@ -180,3 +180,14 @@ The current local coordinator groups by API-key fingerprint, not workspace ident
 ## Branch build validation change (2026-11-18)
 
 The branch-specific Cloudflare Build trigger for this migration branch now runs from /apps/mcp with npx cf deploy --dry-run. This validates the MCP Worker configuration and Build Output without uploading a Worker version, creating a Preview, or changing production. The separate main-branch production trigger was not modified.
+
+## Production/Preview Worker identity split (2026-11-18)
+
+Typed cf/config now resolves Worker names and cross-Worker bindings by isPreview:
+- Production config targets the existing syrianfatora-mcp Worker and the separate syrianfatora-auth Worker.
+- Preview config uses syrianfatora-mcp-oauth-preview and syrianfatora-auth-preview.
+- The production MCP Durable Object and authorization Service Bindings both target syrianfatora-auth.
+- Preview omits RATE_LIMITER, so it cannot call the SyrianFatora upstream API.
+- The production OAuth KV config points to the already-created syrianfatora-oauth-production namespace. Preview KV ID and production public issuer URLs remain placeholders and must be configured/verified before any deployment.
+
+No deployment was performed by this configuration change.
