@@ -16,24 +16,18 @@ export default defineConfig(({ isPreview }) => ({
 		observability: {
 			enabled: true,
 			redactQueryString: true,
-			logs: {
-				enabled: true,
-				invocationLogs: true,
-			},
-			traces: {
-				enabled: true,
-				headSamplingRate: 1,
-			},
+			logs: { enabled: true, invocationLogs: true },
+			traces: { enabled: true, headSamplingRate: 1 },
 		},
 		env: {
 			ISSUER: bindings.text(
 				isPreview
-					? "https://replace-with-auth-preview-host.invalid"
+					? "https://syrianfatora-auth-preview.kinan-api.workers.dev"
 					: "https://replace-with-auth-production-host.invalid",
 			),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
-					? "https://replace-with-mcp-preview-host.invalid/mcp"
+					? "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
 			...(isPreview ? {} : {
