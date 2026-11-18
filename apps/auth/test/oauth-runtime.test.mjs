@@ -4,7 +4,7 @@ import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
-const REDIRECT_URI = "https://client.example.test/callback";
+const REDIRECT_URI = "http://localhost:8787/callback";
 
 let miniflare;
 
@@ -28,7 +28,7 @@ after(async () => {
 });
 
 async function request(path, init) {
-  return miniflare.dispatchFetch(new URL(path, ISSUER).toString(), init);
+  return miniflare.dispatchFetch(new URL(path, ISSUER).toString(), { redirect: "manual", ...init });
 }
 
 async function registerPublicClient() {
@@ -50,8 +50,8 @@ async function registerPublicClient() {
 async function s256(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\\+/g, "-")
-    .replace(/\\//g, "_")
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
     .replace(/=+$/, "");
 }
 
@@ -103,8 +103,12 @@ test("authorization rejects public clients that omit PKCE", async () => {
   params.delete("code_challenge_method");
 
   const response = await request(`/authorize?${params}`);
-  assert.equal(response.status, 400);
-  assert.equal(response.headers.get("Location"), null);
+  assert.equal(response.status, 302);
+  const redirect = new URL(response.headers.get("Location"));
+  assert.equal(redirect.origin, ISSUER);
+  assert.equal(redirect.searchParams.get("state"), "runtime-test-state");
+  assert.ok(redirect.searchParams.has("error"));
+  assert.equal(redirect.searchParams.has("code"), false);
 });
 
 test("authorization rejects plain PKCE and accepts only S256 challenges", async () => {
@@ -114,8 +118,12 @@ test("authorization rejects plain PKCE and accepts only S256 challenges", async 
     code_challenge_method: "plain",
   });
   const response = await request(`/authorize?${params}`);
-  assert.equal(response.status, 400);
-  assert.equal(response.headers.get("Location"), null);
+  assert.equal(response.status, 302);
+  const redirect = new URL(response.headers.get("Location"));
+  assert.equal(redirect.origin, ISSUER);
+  assert.equal(redirect.searchParams.get("state"), "runtime-test-state");
+  assert.ok(redirect.searchParams.has("error"));
+  assert.equal(redirect.searchParams.has("code"), false);
 });
 
 test("valid S256 authorization reaches the first-party consent page without redirecting", async () => {
