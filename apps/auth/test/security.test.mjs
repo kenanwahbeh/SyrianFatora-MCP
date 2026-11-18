@@ -7,11 +7,22 @@ import {
   validateConsentScopes,
   validateSyrianFatoraKey,
   readUrlEncodedForm,
+  renderConsentScopes,
 } from "../src/security.mjs";
 
 test("escapeHtml encodes all HTML-sensitive characters", () => {
   assert.equal(escapeHtml(`<script a="b">Tom & 'Jerry'</script>`),
     "&#60;script a=&#34;b&#34;&#62;Tom &#38; &#39;Jerry&#39;&#60;/script&#62;");
+});
+
+test("consent UI selects only required scopes by default", () => {
+  const html = renderConsentScopes(["mcp:read", "mcp:write", "offline_access"]);
+  assert.match(html, /value="mcp:read" checked required/);
+  assert.match(html, /mcp:read \(required\)/);
+  assert.match(html, /value="mcp:write">/);
+  assert.doesNotMatch(html, /value="mcp:write" checked/);
+  assert.match(html, /value="offline_access">/);
+  assert.doesNotMatch(html, /value="offline_access" checked/);
 });
 
 test("accepts only supported consent scopes and preserves the required read scope", () => {
