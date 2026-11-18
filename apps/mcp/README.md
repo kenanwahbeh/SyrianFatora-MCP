@@ -65,3 +65,7 @@ SyrianFatora documents a default daily quota of 1,000 successful requests per wo
 Important: the current local budget is keyed by API-key fingerprint, while the provider describes its quota as workspace-wide. Do not issue multiple API keys for one workspace through this integration until a stable workspace identity is available or the keys are otherwise grouped under one limiter identity.
 
 Provider documentation: https://syrianfatora.com/developers
+
+## Preview deployment
+
+This application has an isolated Cloudflare Preview Worker. The associated Build configuration is pinned to the `test/durable-object-atomicity` branch. Production deployment is intentionally disabled in this configuration.

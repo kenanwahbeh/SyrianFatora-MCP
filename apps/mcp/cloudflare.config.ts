@@ -16,12 +16,12 @@ export default defineConfig(({ isPreview }) => ({
 		env: {
 			MCP_SERVER_URL: bindings.text(
 				isPreview
-					? "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
+					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
 			AUTH_SERVER_URL: bindings.text(
 				isPreview
-					? "https://syrianfatora-auth-preview.kinan-api.workers.dev"
+					? "https://test-durable-object-atomicity-syrianfatora-auth-preview.kinan-api.workers.dev"
 					: "https://replace-with-auth-production-host.invalid",
 			),
 			RATE_LIMIT_HMAC_SECRET: bindings.secret(),
