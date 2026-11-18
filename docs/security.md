@@ -72,3 +72,9 @@ For the immediate production migration, the user has directed that automated tes
 ## Incident response
 
 If a key is exposed, revoke it in SyrianFatora, invalidate related OAuth grants, rotate affected signing/encryption material as appropriate, and inspect redacted audit events. Never recover or print exposed secrets from logs.
+
+## Upstream quota facts and identity caveat
+
+SyrianFatora's official developer documentation specifies a default daily quota of 1,000 successful requests per workspace, which can be increased on request. Paid plans add a monthly quota tied to the billing cycle; the public documentation does not specify one universal monthly value. Responses expose X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses expose Retry-After. Source: https://syrianfatora.com/developers
+
+The implementation currently coordinates usage by keyed API-credential fingerprint. This strictly shares usage across OAuth grants using the same key, but it does not merge multiple distinct API keys belonging to one workspace. Since the upstream quota is workspace-wide, production rollout must either enforce one active API key per workspace or obtain a stable workspace identifier from SyrianFatora and key the shared quota by that identity. Monthly plan limits remain enforced by the upstream provider; local cooldown handling honors its 429 Retry-After.
