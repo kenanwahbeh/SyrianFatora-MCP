@@ -42,6 +42,16 @@ The resource URL, issuer, OAuth `resources` value, MCP `resourceMetadata.resourc
 
 Every authorization grant maps to one SyrianFatora credential/workspace. Use a unique server-side grant subject. Do not treat the random OAuth subject as proof of a human identity or workspace ID. Enforce grant isolation on every request. Never trust a client-supplied workspace label as identity.
 
+## Upstream quota and abuse controls
+
+Both the authorization server and resource server consume the same upstream SyrianFatora quota. The approval POST must be rate-limited before credential validation, and each MCP upstream proxy call must be rate-limited before fetch. A keyed HMAC fingerprint of the API credential is the stable quota identity across multiple OAuth grants; raw keys must never be used as limiter keys or logged.
+
+Use Cloudflare Rate Limiting bindings for approximate edge/IP and per-grant burst controls, but do not mistake their per-location eventually consistent counters for a strict global workspace quota. A Durable Object keyed by the credential fingerprint must coordinate the strict shared per-credential budget and cooldown state across concurrent requests and locations. It must atomically check/charge before forwarding. Apply the same budget to authorization validation and MCP proxy calls. Honor upstream 429 / Retry-After and open a per-credential cooldown; never blindly retry.
+
+Thresholds must be finite and configurable, based on SyrianFatora's actual quota and legitimate expected usage. No provider quota is currently confirmed in this repository; do not invent one. The production rollout is blocked until thresholds, bindings, fail-closed behavior, and read-only verification are complete. If the limiter is unavailable, do not call the upstream API.
+
+The current source does not yet implement these controls; this is an explicit implementation gap, not a claim of protection.
+
 ## MCP compatibility
 
 Preserve all 51 existing tool names, schemas, upstream paths, and request semantics. Enforce `mcp:read` for MCP access and `mcp:write` for create/update/delete operations. Do not change business behavior as part of the authentication migration.
