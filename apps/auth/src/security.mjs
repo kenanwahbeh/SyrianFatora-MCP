@@ -13,6 +13,19 @@ export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
+export function renderConsentScopes(scopes, requiredScopes = ["mcp:read"]) {
+  if (!Array.isArray(scopes) || !Array.isArray(requiredScopes)) {
+    throw new TypeError("Scope lists must be arrays.");
+  }
+
+  return scopes.map((scope) => {
+    const required = requiredScopes.includes(scope);
+    const attributes = required ? " checked required" : "";
+    const label = required ? " (required)" : " (optional)";
+    return `<label><input type="checkbox" name="scope" value="${escapeHtml(scope)}"${attributes}> ${escapeHtml(scope)}${label}</label>`;
+  }).join("<br>");
+}
+
 export function validateConsentScopes(scopes, allowedScopes, requiredScopes = ["mcp:read"]) {
   if (!Array.isArray(scopes) || !Array.isArray(allowedScopes) || !Array.isArray(requiredScopes)) {
     throw new TypeError("Scope lists must be arrays.");
