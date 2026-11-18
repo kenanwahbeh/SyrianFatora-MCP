@@ -51,7 +51,7 @@ Rate limiting is a **mandatory production release gate**, not an optional harden
 
 The source now enforces these gates: the authorization approval POST passes IP and credential-attempt checks plus the shared credential budget before validateSyrianFatoraKey; every MCP upstream fetch passes the same credential budget and a per-grant burst window. The coordinator is a SQLite-backed Durable Object exported by the authorization Worker and bound into the MCP Worker. Counters use sliding windows and keyed HMAC identities; raw API keys, IP addresses and grant subjects are not stored by the limiter.
 
-This is source implementation, not production verification. Finite thresholds are deliberately mandatory runtime configuration and have not been invented; missing configuration or an unavailable coordinator fails closed. Production rollout remains blocked until the actual SyrianFatora quota is confirmed, identical HMAC secrets are installed on both Workers, the runtime configuration is set, and build/preview and operational checks are completed.
+This is source implementation, not production verification. Finite thresholds are mandatory runtime configuration and have not been invented; missing configuration or an unavailable coordinator fails closed. Both production configs point at the same Durable Object class. Preview omits the limiter binding and therefore fails closed for upstream calls. Production rollout remains blocked until the actual SyrianFatora quota is confirmed, identical HMAC secrets are installed on both Workers, the runtime configuration is set, generated migration metadata and deployed bindings are verified, and direct Durable Object atomicity/concurrency tests are completed.
 
 ## Production migration safeguards
 
