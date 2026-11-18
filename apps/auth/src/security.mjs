@@ -130,6 +130,8 @@ export async function validateSyrianFatoraKey(apiKey, fetchImpl = fetch) {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
+        // Identify this server-to-server integration to upstream security filters.
+        "User-Agent": "SyrianFatora-MCP/0.1 (+https://bytebalancetech.com)",
       },
       redirect: "manual",
       ...(signal ? { signal } : {}),
@@ -153,6 +155,24 @@ export async function validateSyrianFatoraKey(apiKey, fetchImpl = fetch) {
   }
 
   if (response.status === 403) {
+    // Cloudflare and other upstream security layers can also return 403.
+    // Do not misreport those infrastructure denials as missing API scopes.
+    let upstreamError;
+    try {
+      const body = await response.clone().json();
+      upstreamError = body?.error_name || body?.error_code;
+    } catch {
+      // A non-JSON 403 is treated as an API permission denial below.
+    }
+
+    if (upstreamError === "browser_signature_banned" || upstreamError === 1010) {
+      throw new CredentialValidationError(
+        "upstream_access_blocked",
+        "SyrianFatora's security layer blocked the server-to-server validation request. Contact the SyrianFatora site owner to allow this integration.",
+        503,
+      );
+    }
+
     throw new CredentialValidationError(
       "missing_permission",
       "The key is valid but needs the customers.read permission, and API access must be enabled for its workspace.",
