@@ -50,7 +50,7 @@ Use Cloudflare Rate Limiting bindings for approximate edge/IP and per-grant burs
 
 Thresholds must be finite and configurable, based on SyrianFatora's actual quota and legitimate expected usage. No provider quota is currently confirmed in this repository; do not invent one. The production rollout is blocked until thresholds, bindings, fail-closed behavior, and read-only verification are complete. If the limiter is unavailable, do not call the upstream API.
 
-The current source does not yet implement these controls; this is an explicit implementation gap, not a claim of protection.
+The source now implements the authorization and MCP gates through a SQLite-backed Durable Object. Auth and MCP production configs target the same exported class; MCP uses a cross-Worker Durable Object binding. The strict local identity is the keyed API-credential fingerprint, so separate API keys for one upstream workspace are not aggregated. Production remains blocked until finite limits and matching HMAC secrets are configured and verified, generated migration metadata and deployed bindings are inspected, and direct Durable Object atomicity/concurrency tests pass.
 
 ## MCP compatibility
 
