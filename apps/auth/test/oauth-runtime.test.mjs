@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
-import { Miniflare, convertV4MiniflareOptions, createFetchMock } from "miniflare";
+import miniflarePackage from "miniflare";
+
+const { Miniflare, convertV4MiniflareOptions, createFetchMock } = miniflarePackage;
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
