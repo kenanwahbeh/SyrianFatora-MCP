@@ -215,19 +215,20 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
     },
     body,
   });
+  const observedOutbound = outboundRequests.slice(outboundStart);
+  assert.ok(
+    observedOutbound.length > 0,
+    `approval did not reach outboundService; observed ${observedOutbound.length} outbound calls; response status ${response.status}`,
+  );
+  const outbound = observedOutbound.at(-1);
+  assert.equal(outbound.method, "GET");
+  assert.equal(outbound.path, "/api/public/v1/customers?per_page=1");
+  assert.equal(outbound.authorization, "Bearer sk_test_runtime_only_key_123456");
   assert.equal(
     response.status,
     302,
     `approval should redirect after successful validation; got ${response.status}: ${await response.clone().text()}`,
   );
-  const outbound = outboundRequests.slice(outboundStart).at(-1);
-  assert.ok(
-    outbound,
-    `approval must call the isolated upstream mock (observed ${outboundRequests.length - outboundStart} outbound calls)`,
-  );
-  assert.equal(outbound.method, "GET");
-  assert.equal(outbound.path, "/api/public/v1/customers?per_page=1");
-  assert.equal(outbound.authorization, "Bearer sk_test_runtime_only_key_123456");
   return response;
 }
 
