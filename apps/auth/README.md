@@ -75,3 +75,7 @@ The official developer documentation states a default daily quota of 1,000 succe
 Source: https://syrianfatora.com/developers
 
 Configure RATE_LIMIT_CREDENTIAL_MAX_REQUESTS to the confirmed workspace daily allowance and RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS to the chosen conservative local guard window. The current coordinator is keyed by API-key fingerprint. Because the provider describes its quota as workspace-wide, multiple API keys belonging to one workspace would currently receive separate local counters. Production use therefore requires confirming one API key per workspace or obtaining a stable workspace identifier from the provider and changing the limiter identity.
+
+## Preview deployment
+
+This application has an isolated Cloudflare Preview Worker. The associated Build configuration is pinned to the `test/durable-object-atomicity` branch. Production deployment is intentionally disabled in this configuration.
