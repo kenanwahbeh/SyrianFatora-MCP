@@ -7,7 +7,7 @@
 
 Migrate the existing Cloudflare MCP resource Worker in place. Keep the exact production service name `syrianfatora-mcp`, preserve its public MCP endpoint identity and its 51 tools. Add a separate OAuth authorization Worker named `syrianfatora-auth`, connected by Service Binding `AUTH_SERVER` → `SyrianFatoraAuth`. Do not create a replacement MCP Worker.
 
-The user has asked to defer automated tests for this immediate migration. This is a recorded exception, not a passing test result. Only read-only production probes are permitted.
+PR #14 adds focused Auth and MCP rate-limit client tests, and both package build/test workflows pass for the tested code commit. Direct Durable Object SQLite atomicity/concurrency tests remain outstanding. Only read-only production probes are permitted.
 
 ## Current production baseline — read-only inspection
 
