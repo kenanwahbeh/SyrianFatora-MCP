@@ -19,21 +19,32 @@ Thanks for considering a contribution to SyrianFatora MCP.
 
 ## Tests
 
-Run the tests relevant to the files you change and include the commands and results in your pull request.
+Run the tests relevant to the files you change and include the commands and results in your pull request. If the maintainer explicitly defers tests for a production migration, document that exception and the remaining uncertainty; never report deferred tests as passing.
 
-The OAuth authorization-worker tests are currently part of the draft implementation on [PR #1](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/1), not the `main` baseline. On a checkout that contains `apps/auth`, run:
+The OAuth authorization-worker tests are in `apps/auth`:
 
 ```sh
 cd apps/auth
 npm test
 ```
 
+The MCP resource-worker tests are in `apps/mcp`:
+
+```sh
+cd apps/mcp
+npm test
+```
+
 Do not use a real production workspace for write-operation tests. Use harmless read-only calls or isolated test data.
+
+## Production changes
+
+Production Worker changes are permitted only as part of the agreed migration documented in [docs/production-migration.md](docs/production-migration.md). Preserve the existing `syrianfatora-mcp` service identity, record every production action and rollback reference, and do not create a duplicate MCP Worker. Do not change DNS/custom domains or bypass Cloudflare deployment conflicts with `--force` without a reviewed migration plan.
 
 ## Pull request checklist
 
 - [ ] The change has a clear scope and rationale.
-- [ ] Relevant tests pass, or any testing limitation is explained.
-- [ ] Documentation is updated where behavior or setup changes.
+- [ ] Relevant tests pass, or any testing limitation is explicitly documented.
+- [ ] Documentation and the production migration log are updated where behavior or setup changes.
 - [ ] No credentials, private customer data, or generated secrets are included.
-- [ ] Production resources, deployments, routes, and DNS are not changed as part of the contribution.
+- [ ] Any production change follows the approved runbook and records its rollback reference.
