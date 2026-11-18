@@ -33,16 +33,11 @@ export default defineConfig(({ isPreview }) => ({
 			ACCESS_TOKEN_TTL_SECONDS: bindings.text("3600"),
 			REFRESH_TOKEN_TTL_SECONDS: bindings.text("2592000"),
 			CLIENT_REGISTRATION_TTL_SECONDS: bindings.text("7776000"),
-			...(isPreview ? {
-				RATE_LIMITER: bindings.durableObject({
-					worker: "syrianfatora-auth-preview",
-					exportName: "CredentialRateLimiter",
-				}),
-			} : {
-				RATE_LIMITER: bindings.durableObject({
-					worker: "syrianfatora-auth",
-					exportName: "CredentialRateLimiter",
-				}),
+			RATE_LIMITER: bindings.durableObject({
+				worker: isPreview
+					? "syrianfatora-auth-preview"
+					: "syrianfatora-auth",
+				exportName: "CredentialRateLimiter",
 			}),
 			OAUTH_KV: bindings.kv({
 				id: isPreview
