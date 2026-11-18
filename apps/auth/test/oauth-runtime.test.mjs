@@ -177,15 +177,11 @@ test("public-client code flow validates PKCE, rejects replay, rotates refresh to
   const handle = /name="handle" value="([^"]+)"/.exec(html)?.[1];
   assert.ok(handle, "consent handle must be present");
 
-  const form = new URLSearchParams({
-    handle,
-    decision: "approve",
-    api_key: "sk_test_local_only_key_1234567890",
-    scope: "mcp:read",
-    scope2: "offline_access",
-  });
-  // Use repeated scope fields, matching the browser form submission.
-  form.delete("scope2");
+  const form = new URLSearchParams();
+  form.set("handle", handle);
+  form.set("decision", "approve");
+  form.set("api_key", "sk_test_local_only_key_1234567890");
+  form.append("scope", "mcp:read");
   form.append("scope", "offline_access");
   const approval = await request("/authorize", {
     method: "POST",
@@ -225,10 +221,6 @@ test("public-client code flow validates PKCE, rejects replay, rotates refresh to
   assert.ok(tokens.access_token);
   assert.ok(tokens.refresh_token);
 
-  const replay = await exchange(verifier);
-  assert.equal(replay.status, 400);
-  assert.equal((await replay.json()).error, "invalid_grant");
-
   const refresh = async (refreshToken) => request("/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -261,4 +253,10 @@ test("public-client code flow validates PKCE, rejects replay, rotates refresh to
   const revokedRefresh = await refresh(rotated.refresh_token);
   assert.equal(revokedRefresh.status, 400);
   assert.equal((await revokedRefresh.json()).error, "invalid_grant");
+
+  // Replaying an already-exchanged code is rejected. The provider also invalidates
+  // tokens derived from that code, so this assertion intentionally runs last.
+  const replay = await exchange(verifier);
+  assert.equal(replay.status, 400);
+  assert.equal((await replay.json()).error, "invalid_grant");
 });
