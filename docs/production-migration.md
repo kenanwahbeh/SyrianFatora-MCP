@@ -176,3 +176,7 @@ Official developer documentation states:
 Source: https://syrianfatora.com/developers
 
 The current local coordinator groups by API-key fingerprint, not workspace identity. It therefore shares quota across grants using the same key, but cannot yet unify multiple different keys belonging to the same workspace. Before production, confirm one key per workspace or obtain a stable workspace identifier from the provider. Set the local daily threshold from the actual workspace limit; do not assume the default if the workspace limit was raised.
+
+## Branch build validation change (2026-11-18)
+
+The branch-specific Cloudflare Build trigger for this migration branch now runs from /apps/mcp with npx cf deploy --dry-run. This validates the MCP Worker configuration and Build Output without uploading a Worker version, creating a Preview, or changing production. The separate main-branch production trigger was not modified.
