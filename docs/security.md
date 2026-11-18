@@ -67,7 +67,7 @@ This is source implementation, not production verification. Finite thresholds ar
 
 ## Testing exception
 
-For the immediate production migration, the user has directed that automated tests be deferred. This is a documented risk exception, **not** a test pass or a waiver of security controls. Preserve the current known-good production version for rollback, use read-only probes only, and record all unverified behavior in the migration log. Restore automated and end-to-end testing before later feature changes.
+PR #14 adds focused Node tests for the Auth and MCP rate-limit clients. GitHub Actions build checks and package tests are being run on the PR branch; record the final run results in the audit and migration logs. These client tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or real concurrent consumption. Direct Durable Object tests and production read-only configuration verification remain release gates. No production write-operation tests are allowed.
 
 ## Incident response
 
