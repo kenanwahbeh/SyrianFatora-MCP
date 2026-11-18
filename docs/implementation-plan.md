@@ -93,7 +93,7 @@ The user has directed that automated tests be deferred for this immediate migrat
 
 ## Testing exception
 
-PR #14 adds Auth and MCP rate-limit client tests. The MCP build and test workflow has passed for the latest test commit; the Auth workflow is still running at the time of this edit. These tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or concurrent consumption. Direct Durable Object tests and read-only production configuration checks remain release gates. Never run write-operation tests against a real customer workspace.
+PR #14 adds Auth and MCP rate-limit client tests. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: each completed dependency installation, `npm run build:check`, and `npm test`. These tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or concurrent consumption. Direct Durable Object tests and read-only production configuration checks remain release gates. Never run write-operation tests against a real customer workspace.
 
 ## Rate-limiting implementation
 
