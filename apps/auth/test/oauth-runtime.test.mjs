@@ -115,6 +115,31 @@ test("OAuth discovery advertises the configured issuer, resource and endpoints",
   assert.equal(metadata.registration_endpoint, `${ISSUER}/oauth/register`);
   assert.ok(metadata.scopes_supported.includes("mcp:read"));
   assert.ok(metadata.scopes_supported.includes("mcp:write"));
+  assert.equal(metadata.client_id_metadata_document_supported, true);
+});
+
+test("dynamic client registration rejects incomplete metadata", async () => {
+  const response = await request("/oauth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: "Incomplete runtime client",
+      token_endpoint_auth_method: "none",
+    }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test("CIMD rejects a root client identifier before metadata resolution", async () => {
+  const verifier = "runtime-cimd-verifier-that-is-long-enough";
+  const params = authorizationParams(
+    { client_id: "https://client.example.test" },
+    {
+      code_challenge: await s256(verifier),
+    },
+  );
+  const response = await request(`/authorize?${params}`);
+  assert.equal(response.status, 400);
 });
 
 test("authorization rejects an unregistered redirect URI before showing consent", async () => {
