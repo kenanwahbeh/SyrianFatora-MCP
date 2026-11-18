@@ -1,21 +1,16 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
-import { Miniflare, convertV4MiniflareOptions, createFetchMock } from "miniflare";
+import { Miniflare } from "miniflare";
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
 const REDIRECT_URI = "http://localhost:8787/callback";
 
 let miniflare;
-const fetchMock = createFetchMock();
+const outboundRequests = [];
 
 before(async () => {
-  fetchMock.disableNetConnect();
-  fetchMock.get("https://syrianfatora.com")
-    .intercept({ method: "GET", path: "/api/public/v1/customers?per_page=1" })
-    .reply(200);
-
-  miniflare = new Miniflare(convertV4MiniflareOptions({
+  miniflare = new Miniflare({
     scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
     modules: true,
     compatibilityDate: "2026-11-17",
@@ -36,8 +31,22 @@ before(async () => {
     durableObjects: {
       RATE_LIMITER: { className: "CredentialRateLimiter", useSQLite: true },
     },
-    fetchMock,
-  }));
+    outboundService: async (request) => {
+      const url = new URL(request.url);
+      const authorization = request.headers.get("Authorization");
+      outboundRequests.push({ method: request.method, url: request.url, authorization });
+      if (
+        request.method === "GET" &&
+        url.origin === "https://syrianfatora.com" &&
+        url.pathname === "/api/public/v1/customers" &&
+        url.search === "?per_page=1" &&
+        authorization === "Bearer sk_test_runtime_only_key_123456"
+      ) {
+        return new Response(null, { status: 200 });
+      }
+      return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
+    },
+  });
   await miniflare.ready;
 });
 
