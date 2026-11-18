@@ -130,6 +130,7 @@ test("valid S256 authorization reaches the first-party consent page without redi
   const client = await registerPublicClient();
   const verifier = "a-runtime-test-verifier-that-is-long-enough";
   const params = authorizationParams(client, {
+    scope: "mcp:read mcp:write offline_access",
     code_challenge: await s256(verifier),
   });
   const response = await request(`/authorize?${params}`);
