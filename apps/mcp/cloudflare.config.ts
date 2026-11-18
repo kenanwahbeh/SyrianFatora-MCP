@@ -11,6 +11,7 @@ export default defineConfig(({ isPreview }) => ({
 		workersDev: true,
 		observability: {
 			enabled: true,
+			redactQueryString: true,
 			logs: {
 				enabled: true,
 				invocationLogs: true,
