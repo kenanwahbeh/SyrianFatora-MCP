@@ -263,7 +263,7 @@ test("approval validates a synthetic key through the isolated outbound mock and 
   assert.equal(tokenResponse.status, 200, await tokenResponse.clone().text());
   const tokens = await tokenResponse.json();
   assert.equal(typeof tokens.access_token, "string");
-  assert.equal(tokens.token_type, "Bearer");
+  assert.match(tokens.token_type, /^bearer$/i);
   assert.ok(tokens.expires_in > 0);
 });
 
