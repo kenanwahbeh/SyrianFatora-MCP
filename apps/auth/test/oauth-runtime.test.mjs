@@ -17,8 +17,34 @@ before(async () => {
     bindings: {
       ISSUER,
       MCP_SERVER_URL: MCP_RESOURCE,
+      RATE_LIMIT_HMAC_SECRET: "local-test-only-hmac-secret-at-least-32-bytes",
+      RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS: "100",
+      RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: "60",
+      RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: "100",
+      RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: "60",
+      RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: "100",
+      RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS: "60",
+      RATE_LIMIT_GRANT_WINDOW_SECONDS: "60",
     },
     kvNamespaces: ["OAUTH_KV"],
+    durableObjects: {
+      RATE_LIMITER: { className: "CredentialRateLimiter", useSQLite: true },
+    },
+    // Intercept every outbound request from workerd. Only the harmless
+    // SyrianFatora read-only key-validation request is allowed in this test.
+    outboundService: async (request) => {
+      const url = new URL(request.url);
+      if (
+        request.method === "GET" &&
+        url.origin === "https://syrianfatora.com" &&
+        url.pathname === "/api/public/v1/customers" &&
+        url.search === "?per_page=1" &&
+        request.headers.get("Authorization") === "Bearer sk_test_runtime_only_key_123456"
+      ) {
+        return new Response(null, { status: 200 });
+      }
+      return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
+    },
   }));
   await miniflare.ready;
 });
@@ -144,3 +170,108 @@ test("valid S256 authorization reaches the first-party consent page without redi
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
+
+
+async function beginAuthorization(client, verifier, scope = "mcp:read") {
+  const params = authorizationParams(client, {
+    scope,
+    code_challenge: await s256(verifier),
+  });
+  const response = await request(`/authorize?${params}`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  const handle = html.match(/name="handle" value="([^"]+)"/)?.[1];
+  assert.ok(handle, "consent handle must be present");
+  const setCookie = response.headers.get("Set-Cookie") || "";
+  const cookie = setCookie.split(";")[0];
+  assert.ok(cookie, "browser-binding cookie must be present");
+  return { handle, cookie };
+}
+
+async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
+  const body = new URLSearchParams({
+    handle,
+    decision: "approve",
+    api_key: "sk_test_runtime_only_key_123456",
+  });
+  for (const scope of scopes) body.append("scope", scope);
+  const response = await request("/authorize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "CF-Connecting-IP": "192.0.2.10",
+      Cookie: cookie,
+    },
+    body,
+  });
+  return response;
+}
+
+async function exchangeCode(client, code, verifier) {
+  return request("/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT_URI,
+      client_id: client.client_id,
+      code_verifier: verifier,
+      resource: MCP_RESOURCE,
+    }),
+  });
+}
+
+test("approval validates a synthetic key through the isolated outbound mock and issues an authorization code", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-approval-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier);
+  const approval = await approveAuthorization(handle, cookie);
+  assert.equal(approval.status, 302, await approval.clone().text());
+  const redirect = new URL(approval.headers.get("Location"));
+  assert.equal(redirect.origin, new URL(REDIRECT_URI).origin);
+  assert.equal(redirect.searchParams.get("state"), "runtime-test-state");
+  const code = redirect.searchParams.get("code");
+  assert.ok(code, "successful approval must return an authorization code");
+
+  const tokenResponse = await exchangeCode(client, code, verifier);
+  assert.equal(tokenResponse.status, 200, await tokenResponse.clone().text());
+  const tokens = await tokenResponse.json();
+  assert.equal(typeof tokens.access_token, "string");
+  assert.equal(tokens.token_type, "Bearer");
+  assert.ok(tokens.expires_in > 0);
+});
+
+test("token endpoint rejects a mismatched PKCE verifier", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-pkce-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier);
+  const approval = await approveAuthorization(handle, cookie);
+  assert.equal(approval.status, 302, await approval.clone().text());
+  const redirect = new URL(approval.headers.get("Location"));
+  const code = redirect.searchParams.get("code");
+  assert.ok(code);
+
+  const response = await exchangeCode(client, code, "wrong-verifier-that-is-long-enough");
+  assert.equal(response.status, 400, await response.clone().text());
+  const error = await response.json();
+  assert.equal(error.error, "invalid_grant");
+});
+
+test("authorization codes cannot be redeemed more than once", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-replay-verifier-that-is-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier);
+  const approval = await approveAuthorization(handle, cookie);
+  assert.equal(approval.status, 302, await approval.clone().text());
+  const redirect = new URL(approval.headers.get("Location"));
+  const code = redirect.searchParams.get("code");
+  assert.ok(code);
+
+  const first = await exchangeCode(client, code, verifier);
+  assert.equal(first.status, 200, await first.clone().text());
+  const second = await exchangeCode(client, code, verifier);
+  assert.equal(second.status, 400, await second.clone().text());
+  const error = await second.json();
+  assert.equal(error.error, "invalid_grant");
+});
