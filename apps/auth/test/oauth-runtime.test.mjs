@@ -28,7 +28,7 @@ after(async () => {
 });
 
 async function request(path, init) {
-  return miniflare.dispatchFetch(new Request(new URL(path, ISSUER), init));
+  return miniflare.dispatchFetch(new URL(path, ISSUER).toString(), init);
 }
 
 async function registerPublicClient() {
