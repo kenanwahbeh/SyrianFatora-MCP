@@ -31,6 +31,10 @@ This is the separate OAuth 2.1 authorization server required by the existing `sy
 
 The Worker needs a production KV namespace and the compatibility flags `nodejs_compat` and `global_fetch_strictly_public`. Do not deploy with `.invalid` URLs or placeholder KV IDs. Verify the account's Worker subdomain or configured custom domain first.
 
+## Mandatory rate-limit requirement
+
+The approval POST must pass an enforced limiter before `validateSyrianFatoraKey` is called. Apply both an edge/IP attempt limit and a repeated credential-fingerprint attempt limit. The credential-level budget must be shared with MCP upstream calls and must not use the raw API key as a limiter key. A strict shared budget requires a Durable Object coordinator; a standard Workers Rate Limiting binding is approximate per Cloudflare location and is not sufficient for strict quota accounting. Fail closed if the limiter is unavailable. Do not deploy this Worker until the gate is implemented and verified.
+
 ## Security and known gaps
 
 - Never place a real API key in source control, an issue, a test fixture, or a chat message.
