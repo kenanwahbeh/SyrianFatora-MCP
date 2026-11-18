@@ -161,3 +161,7 @@ Never record credential values or secret material in this file.
 - Added Preview configuration declarations; Preview does not receive a production limiter binding and must fail closed.
 
 Not yet verified: build checks, Worker runtime behavior, cross-Worker Durable Object binding, live quota values, HMAC secret parity, and production deployment. No production Worker, route, DNS record or customer workspace was changed. Thresholds remain unset until SyrianFatora quota information is confirmed.
+
+### Preview configuration correction (2026-11-18)
+
+The first CI build rejected Wrangler's top-level previews property because this repository uses the typed cf/config API. Both Worker configs now use defineConfig(({ isPreview }) => ...) and omit the RATE_LIMITER binding for Preview builds. Preview requests therefore fail closed before any SyrianFatora upstream call. The Preview command for this toolchain is cf previews deploy; do not use npx wrangler preview against these cf/config projects.
