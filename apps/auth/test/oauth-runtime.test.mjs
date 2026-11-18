@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
+import { access, rm } from "node:fs/promises";
+import path from "node:path";
 import test, { after, before } from "node:test";
+import { fileURLToPath } from "node:url";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
+import { build } from "vite";
+
+const appRoot = fileURLToPath(new URL("..", import.meta.url));
+const authBundlePath = path.join(
+  appRoot,
+  ".cloudflare/output/v1/workers/default/bundle/index.js",
+);
+const resourceWorkerEntry = fileURLToPath(
+  new URL("../test-support/resource-runtime-worker.mjs", import.meta.url),
+);
+const resourceWorkerOutDir = path.join(
+  appRoot,
+  ".cloudflare/test/resource-runtime-worker",
+);
 
 const ISSUER = "http://localhost:8787";
 const MCP_RESOURCE = "https://mcp.example.test/mcp";
@@ -11,13 +28,50 @@ const TEST_KEYS = [
 const REDIRECT_URI = "http://localhost:8787/callback";
 
 let miniflare;
+let resourceServer;
+let resourceWorkerPath;
 const outboundRequests = [];
 
+// The resource-server fixture imports the OAuth provider from node_modules.
+// Workerd only loads modules that Miniflare registers explicitly, so bundle
+// the fixture (keeping `cloudflare:*` external) before starting the runtime.
+async function bundleResourceWorker() {
+  await rm(resourceWorkerOutDir, { recursive: true, force: true });
+  await build({
+    configFile: false,
+    root: appRoot,
+    logLevel: "silent",
+    build: {
+      outDir: resourceWorkerOutDir,
+      emptyOutDir: true,
+      minify: false,
+      target: "esnext",
+      lib: {
+        entry: resourceWorkerEntry,
+        formats: ["es"],
+        fileName: () => "resource-runtime-worker.js",
+      },
+      rollupOptions: {
+        external: (id) => id.startsWith("cloudflare:"),
+      },
+    },
+  });
+  return path.join(resourceWorkerOutDir, "resource-runtime-worker.js");
+}
+
 before(async () => {
+  try {
+    await access(authBundlePath);
+  } catch {
+    throw new Error(
+      `Missing auth Worker bundle at ${authBundlePath}. Run "npm run build" before "npm test".`,
+    );
+  }
+  resourceWorkerPath = await bundleResourceWorker();
   miniflare = new Miniflare(convertV4MiniflareOptions({
     workers: [{
       name: "auth",
-      scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
+      scriptPath: authBundlePath,
       modules: true,
       compatibilityDate: "2026-11-17",
       // Keep strict public-fetch routing out of this isolated Miniflare mock
@@ -36,7 +90,10 @@ before(async () => {
         RATE_LIMIT_GRANT_WINDOW_SECONDS: "60",
         ACCESS_TOKEN_TTL_SECONDS: "60",
         REFRESH_TOKEN_TTL_SECONDS: "60",
-        CLIENT_REGISTRATION_TTL_SECONDS: "60",
+        // Client registrations must outlive the token-expiry wait below;
+        // otherwise the refresh attempt fails as an unknown client (401)
+        // instead of an expired refresh token (400).
+        CLIENT_REGISTRATION_TTL_SECONDS: "3600",
       },
       kvNamespaces: ["OAUTH_KV"],
       durableObjects: {
@@ -64,7 +121,7 @@ before(async () => {
     },
     {
       name: "resource",
-      scriptPath: new URL("./resource-runtime-worker.mjs", import.meta.url).pathname,
+      scriptPath: resourceWorkerPath,
       modules: true,
       compatibilityDate: "2026-11-17",
       compatibilityFlags: ["nodejs_compat"],
@@ -77,10 +134,12 @@ before(async () => {
     }],
   }));
   await miniflare.ready;
+  resourceServer = await miniflare.getWorker("resource");
 });
 
 after(async () => {
   await miniflare?.dispose();
+  await rm(resourceWorkerOutDir, { recursive: true, force: true });
 });
 
 async function request(path, init) {
@@ -349,7 +408,7 @@ test("token endpoint rejects a mismatched PKCE verifier", async () => {
 });
 
 async function resourceValidate(token) {
-  const response = await miniflare.dispatchFetch("https://mcp.example.test/mcp", {
+  const response = await resourceServer.fetch("https://mcp.example.test/mcp", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,

@@ -8,6 +8,7 @@
     "dev": "cf dev",
     "build": "cf build",
     "build:check": "cf build",
+    "deploy:preview": "./node_modules/.bin/cf previews deploy",
     "test": "node --test"
   },
   "dependencies": {

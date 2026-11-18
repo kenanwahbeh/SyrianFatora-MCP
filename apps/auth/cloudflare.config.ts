@@ -16,40 +16,35 @@ export default defineConfig(({ isPreview }) => ({
 		observability: {
 			enabled: true,
 			redactQueryString: true,
-			logs: {
-				enabled: true,
-				invocationLogs: true,
-			},
-			traces: {
-				enabled: true,
-				headSamplingRate: 1,
-			},
+			logs: { enabled: true, invocationLogs: true },
+			traces: { enabled: true, headSamplingRate: 1 },
 		},
 		env: {
 			ISSUER: bindings.text(
 				isPreview
-					? "https://replace-with-auth-preview-host.invalid"
+					? "https://syrianfatora-auth-preview.kinan-api.workers.dev"
 					: "https://replace-with-auth-production-host.invalid",
 			),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
-					? "https://replace-with-mcp-preview-host.invalid/mcp"
+					? "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
 					: "https://replace-with-mcp-production-host.invalid/mcp",
 			),
 			ACCESS_TOKEN_TTL_SECONDS: bindings.text("3600"),
 			REFRESH_TOKEN_TTL_SECONDS: bindings.text("2592000"),
 			CLIENT_REGISTRATION_TTL_SECONDS: bindings.text("7776000"),
-			...(isPreview ? {} : {
-				RATE_LIMITER: bindings.durableObject({
-					worker: "syrianfatora-auth",
-					exportName: "CredentialRateLimiter",
-				}),
+			RATE_LIMITER: bindings.durableObject({
+				worker: isPreview
+					? "syrianfatora-auth-preview"
+					: "syrianfatora-auth",
+				exportName: "CredentialRateLimiter",
 			}),
 			OAUTH_KV: bindings.kv({
 				id: isPreview
-					? "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+					? "6565df7797504ac882ef39c009626866"
 					: "d19d9bd755c349f688cd55e299b8168f",
 			}),
+			RATE_LIMIT_HMAC_SECRET: bindings.secret(),
 		},
 	},
 }));

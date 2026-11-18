@@ -11,12 +11,8 @@ const resourceServer = new OAuthResourceServer({
     resource: env.MCP_SERVER_URL,
     authorization_servers: [env.AUTH_SERVER_URL],
   },
-  // Advertised to clients; enforced explicitly in the handler below.
   requiredScopes: ["mcp:read"],
-  // Preview intentionally has no Auth service binding. Returning a validator that
-  // rejects every token keeps the Preview isolated and fail-closed; production
-  // continues to use the real Auth Worker service binding.
-  validateToken: (workerEnv) => workerEnv.AUTH_SERVER?.validateToken ?? (async () => null),
+  validateToken: (workerEnv) => workerEnv.AUTH_SERVER.validateToken,
   handler: {
     fetch(request, workerEnv, ctx) {
       if (!ctx.auth.scope.includes("mcp:read")) {
@@ -49,9 +45,26 @@ function addCors(response) {
   });
 }
 
+function clientMetadataResponse(url) {
+  return Response.json({
+    client_id: url.href,
+    client_name: "SyrianFatora Preview E2E Client",
+    redirect_uris: ["https://example.com/oauth/callback"],
+    response_types: ["code"],
+    grant_types: ["authorization_code", "refresh_token"],
+    token_endpoint_auth_method: "none",
+  }, {
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
 export default {
   async fetch(request, workerEnv, ctx) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/oauth/client-metadata.json") {
+      return addCors(clientMetadataResponse(url));
+    }
 
     if (url.pathname === "/health") {
       return addCors(Response.json({
