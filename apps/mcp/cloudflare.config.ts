@@ -24,6 +24,7 @@ export default defineConfig(({ isPreview }) => ({
 					? "https://syrianfatora-auth-preview.kinan-api.workers.dev"
 					: "https://replace-with-auth-production-host.invalid",
 			),
+			RATE_LIMIT_HMAC_SECRET: bindings.secret(),
 			...(isPreview ? {
 				AUTH_SERVER: bindings.worker({
 					worker: "syrianfatora-auth-preview",
