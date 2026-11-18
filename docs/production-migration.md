@@ -82,10 +82,26 @@ No successful production overwrite was reported from this failed build. Do not t
    - `MCP_SERVER_URL` exact public HTTPS MCP URL including `/mcp`
    - `AUTH_SERVER_URL` exact issuer origin
    - `AUTH_SERVER` Service Binding to `syrianfatora-auth`, entrypoint `SyrianFatoraAuth`
-6. Confirm the Cloudflare Build integration's root directory, build command, deploy command, and target Worker name all agree with the config. Do not let a docs-only branch trigger a production deployment.
+6. The current Cloudflare Build trigger is recorded below. Confirm its root directory, build command, deploy command, and target Worker name all agree with the config. Do not let a docs-only branch trigger a production deployment.
 7. Deploy the auth Worker, record its deployment/version IDs, then migrate the existing MCP Worker in place.
 8. Run read-only health, OAuth metadata/discovery, invalid-token, initialize, and tools/list probes. Do not perform create/update/delete calls against a real workspace.
 9. Update this log with actual results and the final rollback identifiers.
+
+## Existing Cloudflare Build trigger
+
+Read-only inspection of the trigger attached to the existing MCP script tag:
+
+- Script tag: `80f433e8c9db45adba9d8df05ff403d8`
+- Trigger ID: `593221cf-b17a-4506-979a-ebb7f4307c69`
+- Repository: `kenanwahbeh/SyrianFatora-MCP`
+- Watched branch: `main`
+- Root directory: `/apps/mcp`
+- Build command: `npm run build:check`
+- Deploy command: `npx cf deploy --prebuilt --mode production`
+- Included paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
+- Excluded paths: none
+
+The docs-only branch/PR does not match the trigger's included paths, so these documentation changes do not start the production MCP build. There is no separate auth Worker Build trigger recorded yet.
 
 ## Execution log
 
@@ -95,6 +111,8 @@ No successful production overwrite was reported from this failed build. Do not t
 | 2026-11-18 | Retrieved live `syrianfatora-mcp` script and compared with `src/worker-v1.1.0.mjs` | Exact source match |
 | 2026-11-18 | Checked Cloudflare KV namespace list | Initially empty |
 | 2026-11-18 | Created KV namespace `syrianfatora-oauth-production` | Created; ID `d19d9bd755c349f688cd55e299b8168f`; not yet bound to a Worker |
+| 2026-11-18 | Inspected existing Cloudflare Build trigger | Root `/apps/mcp`; build `npm run build:check`; deploy `npx cf deploy --prebuilt --mode production`; branch `main`; only `apps/mcp/**` and its package manifests trigger it |
+| 2026-11-18 | Attempted to merge documentation PR #13 | GitHub blocked merge while CodeQL results were pending; no bypass attempted |
 | 2026-11-18 | Checked existing Worker domains | No MCP custom domain found |
 | 2026-11-18 | Reviewed previous Cloudflare Build failure | Deployment aborted on Worker-name/script-API conflict |
 | 2026-11-18 | Changed existing MCP Worker code, bindings, routes, DNS, or deployment | **No changes made** |
