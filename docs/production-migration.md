@@ -1,7 +1,7 @@
 # Production migration runbook and execution log
 
 **Last updated:** 2026-11-18  
-**Status:** Preparation in progress; no production resources changed during this session.
+**Status:** Preparation in progress. One production KV namespace has been created; no Worker code, binding, route, DNS, or deployment has been changed.
 
 ## Agreed outcome
 
@@ -28,7 +28,7 @@ Cloudflare account: the account currently connected for this project.
 | MCP Worker workers.dev enabled | yes |
 | Worker preview URLs enabled | no |
 | Worker custom domains | none found |
-| Account KV namespaces | none found |
+| Account KV namespaces before this session | none found |
 | Auth Worker in account | none found at inspection |
 | Observed existing custom Worker domains | `bytebalancetech.com`, `admin.bytebalancetech.com`, both attached to `bytebalancetech`; neither is an MCP domain |
 
@@ -70,8 +70,8 @@ No successful production overwrite was reported from this failed build. Do not t
 ## Configuration still required
 
 1. Verify the candidate MCP HTTPS endpoint directly.
-2. Decide/verify the production authorization origin. The auth Worker does not exist yet; use the account's verified workers.dev subdomain unless an already-owned custom domain is deliberately selected.
-3. Create one production KV namespace for the auth Worker's `OAUTH_KV` binding and record its namespace ID here.
+2. Use the verified account workers.dev subdomain `kinan-api` for the auth origin unless an already-owned custom domain is deliberately selected. Candidate auth origin: `https://syrianfatora-auth.kinan-api.workers.dev`; direct HTTPS probe is still required after deployment.
+3. Production KV namespace has now been created for the auth Worker's `OAUTH_KV` binding. Namespace: `syrianfatora-oauth-production`; ID: `d19d9bd755c349f688cd55e299b8168f`.
 4. Update `apps/auth/cloudflare.config.ts`:
    - Worker name `syrianfatora-auth`
    - `ISSUER` exact public HTTPS auth origin
@@ -93,10 +93,11 @@ No successful production overwrite was reported from this failed build. Do not t
 | --- | --- | --- |
 | 2026-11-18 | Inspected production Worker settings, versions, deployments, domains, workers.dev subdomain, and KV namespaces | Read-only; completed |
 | 2026-11-18 | Retrieved live `syrianfatora-mcp` script and compared with `src/worker-v1.1.0.mjs` | Exact source match |
-| 2026-11-18 | Checked Cloudflare KV namespace list | Empty; production namespace still needs creation |
+| 2026-11-18 | Checked Cloudflare KV namespace list | Initially empty |
+| 2026-11-18 | Created KV namespace `syrianfatora-oauth-production` | Created; ID `d19d9bd755c349f688cd55e299b8168f`; not yet bound to a Worker |
 | 2026-11-18 | Checked existing Worker domains | No MCP custom domain found |
 | 2026-11-18 | Reviewed previous Cloudflare Build failure | Deployment aborted on Worker-name/script-API conflict |
-| 2026-11-18 | Changed production Worker, DNS, routes, bindings, or deployments | **No changes made** |
+| 2026-11-18 | Changed existing MCP Worker code, bindings, routes, DNS, or deployment | **No changes made** |
 
 ## Change record template
 
