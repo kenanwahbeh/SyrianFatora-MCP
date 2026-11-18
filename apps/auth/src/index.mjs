@@ -21,6 +21,9 @@ const authorizationServer = new OAuthAuthorizationServer({
   scopesSupported: SUPPORTED_SCOPES,
   clientIdMetadataDocumentEnabled: true,
   clientRegistrationEndpoint: "/oauth/register",
+  accessTokenTTL: Number(env.ACCESS_TOKEN_TTL_SECONDS ?? 3600),
+  refreshTokenTTL: Number(env.REFRESH_TOKEN_TTL_SECONDS ?? 2592000),
+  clientRegistrationTTL: Number(env.CLIENT_REGISTRATION_TTL_SECONDS ?? 7776000),
 });
 
 function securityHeaders(headers = new Headers()) {
