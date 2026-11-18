@@ -166,7 +166,7 @@ The first CI build rejected Wrangler's top-level previews property because this 
 ## SyrianFatora quota findings (2026-11-18)
 
 Official developer documentation states:
-- Daily quota: 1,000 successful requests per workspace by default; can be raised on request.
+- Daily quota: 1,000 requests per workspace by default; can be raised on request. The documentation also says all requests, including 429 responses, are recorded in usage/audit logs; it does not establish that every 429 consumes the daily allowance.
 - Paid plans: additional monthly quota measured by billing cycle; public docs do not state one universal monthly limit.
 - Response headers: X-RateLimit-Limit and X-RateLimit-Remaining; 429 responses include Retry-After.
 
