@@ -191,3 +191,19 @@ Typed cf/config now resolves Worker names and cross-Worker bindings by isPreview
 - The production OAuth KV config points to the already-created syrianfatora-oauth-production namespace. Preview KV ID and production public issuer URLs remain placeholders and must be configured/verified before any deployment.
 
 No deployment was performed by this configuration change.
+
+## Cloudflare dry-run verification (2026-11-18)
+
+- Build ID: 21ac2039-97a6-4ac2-90e5-c97ca1455a4a
+- Commit: 5ed44312e0720cae16c2247a39cd6e35c47d9fa4
+- Command: npx cf deploy --dry-run
+- Root: /apps/mcp
+- Result: success; no Worker version upload or production deployment.
+- Confirmed bindings in dry-run output:
+  - RATE_LIMITER -> CredentialRateLimiter exported by syrianfatora-auth
+  - AUTH_SERVER -> SyrianFatoraAuth exported by syrianfatora-auth
+- Confirmed the configured Worker name matches the existing production MCP Worker name, syrianfatora-mcp. Production binding names are now aligned with the agreed in-place migration.
+
+The dependency installation step also reported 5 high-severity npm audit findings. No automatic dependency remediation was applied; review the advisories and choose compatible fixes before production deployment.
+
+The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documentation-only changes do not start unnecessary builds. The main-branch production trigger remains unchanged.
