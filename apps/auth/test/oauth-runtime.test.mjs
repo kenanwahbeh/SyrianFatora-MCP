@@ -208,6 +208,11 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"]) {
     },
     body,
   });
+  const outbound = outboundRequests.at(-1);
+  assert.ok(outbound, "approval must call the isolated upstream mock");
+  assert.equal(outbound.method, "GET");
+  assert.equal(outbound.url, "https://syrianfatora.com/api/public/v1/customers?per_page=1");
+  assert.equal(outbound.authorization, "Bearer sk_test_runtime_only_key_123456");
   return response;
 }
 
