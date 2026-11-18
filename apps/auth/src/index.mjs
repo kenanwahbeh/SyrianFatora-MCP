@@ -7,6 +7,7 @@ import { enforceAuthorizationRateLimit, RateLimitError } from "./rate-limit-clie
 import {
   CredentialValidationError,
   escapeHtml,
+  renderConsentScopes,
   validateConsentScopes,
   validateSyrianFatoraKey,
   readUrlEncodedForm,
@@ -53,9 +54,7 @@ function authorizationPage(details, handle) {
   const clientDomain = details.clientDomain
     ? `Published by <strong>${escapeHtml(details.clientDomain)}</strong>.`
     : "This app registered itself; its publisher domain is not verified.";
-  const scopes = details.scope
-    .map((scope) => `<label><input type="checkbox" name="scope" value="${escapeHtml(scope)}" checked> ${escapeHtml(scope)}</label>`)
-    .join("<br>");
+  const scopes = renderConsentScopes(details.scope);
   const localWarning = details.redirectIsLoopback
     ? "<p><strong>This sends access to an app on your computer.</strong> Continue only if you just started signing in from it.</p>"
     : "";
@@ -80,6 +79,7 @@ function authorizationPage(details, handle) {
       <label for="api_key">Workspace API key</label>
       <input id="api_key" name="api_key" type="password" required minlength="20" maxlength="512" autocomplete="off" spellcheck="false" autocapitalize="none">
       <h2>Requested permissions</h2>
+      <p>Read access is required. Write access and offline access are optional; select only what you need.</p>
       ${scopes}
       <p><button type="submit" name="decision" value="approve">Connect and allow</button>
       <button type="submit" name="decision" value="deny" formnovalidate>Deny</button></p>
