@@ -67,6 +67,23 @@ The reported conflict was:
 
 No successful production overwrite was reported from this failed build. Do not treat the failed deployment as an applied release. Do not use `--force` as a blind workaround.
 
+## Mandatory rate-limit blocker
+
+The current OAuth source has no explicit rate-limit gate:
+- `apps/auth/src/index.mjs` invokes `validateSyrianFatoraKey(apiKey)` on an approval POST without a preceding limiter.
+- `apps/mcp/src/handler.mjs` forwards each accepted tool call upstream without a limiter.
+
+Do not deploy this source to production until the following controls are implemented:
+1. Approval POST gate before credential validation.
+2. Per-IP/edge attempt gate plus credential-fingerprint attempt gate.
+3. Strict per-credential budget shared by auth validation and MCP proxy calls, coordinated by a Durable Object keyed by a server-side HMAC fingerprint.
+4. Per-grant burst protection.
+5. Fail-closed behavior when the strict limiter is unavailable.
+6. Upstream 429 / Retry-After handling and per-credential cooldown.
+7. Finite thresholds selected from verified SyrianFatora quota information; do not invent a provider limit.
+
+Cloudflare Workers Rate Limiting bindings are suitable for approximate per-location edge/burst gates only. They are not a strict global quota mechanism. The Durable Object coordinator is required for the shared per-credential upstream budget.
+
 ## Configuration still required
 
 1. Verify the candidate MCP HTTPS endpoint directly.
@@ -104,6 +121,8 @@ Read-only inspection of the trigger attached to the existing MCP script tag:
 The docs-only branch/PR does not match the trigger's included paths, so these documentation changes do not start the production MCP build. There is no separate auth Worker Build trigger recorded yet.
 
 ## Execution log
+
+| 2026-11-18 | Reviewed rate-limit concern against current auth and MCP source | Confirmed missing: approval POST validates API key without a limiter; MCP handler proxies upstream without a limiter. Added a mandatory production blocker to security, architecture, implementation plan, and this runbook. No code enforcement added yet. |
 
 | Time (UTC) | Action | Result |
 | --- | --- | --- |
