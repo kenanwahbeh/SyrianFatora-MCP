@@ -60,16 +60,16 @@ The user has directed that automated tests be deferred for this immediate migrat
 
 ## Phase 5 — Rate limiting and upstream quota protection (production blocker)
 
-- [ ] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
-- [ ] Add a per-IP/edge abuse gate and repeated credential-fingerprint attempt gate for `POST /authorize`.
-- [ ] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
-- [ ] Implement the strict coordinator with a Durable Object; atomically check and charge before every upstream request, including concurrent requests and requests from different Cloudflare locations.
-- [ ] Add per-grant burst limits for MCP clients; do not rely on random grant IDs as the only quota identity.
-- [ ] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
-- [ ] Honor SyrianFatora 429 and Retry-After; add per-credential cooldown/circuit breaker and disable automatic quota-exhausting retries.
-- [ ] Set finite configurable thresholds using verified SyrianFatora quota information and legitimate usage assumptions; document values and rationale. No quota values are currently confirmed.
-- [ ] Verify that multiple OAuth grants using the same upstream credential share one quota budget.
-- [ ] Verify rate-limit rejection paths do not call the upstream API.
+- [x] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
+- [x] Add IP and repeated credential-fingerprint attempt gates for `POST /authorize`.
+- [x] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
+- [x] Implement the coordinator as a SQLite-backed Durable Object; multi-bucket checks and inserts run in `transactionSync()`. Direct concurrency/atomicity tests remain outstanding.
+- [x] Add per-grant sliding-window limits for MCP clients in addition to the shared credential bucket.
+- [x] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
+- [x] Honor SyrianFatora 429 and Retry-After; record per-credential cooldown without automatic retries.
+- [ ] Set finite configurable thresholds using the actual workspace quota and legitimate usage assumptions; no values are guessed.
+- [x] Source-level identity check confirms grants using the same API key target the same credential Durable Object. Different API keys are not aggregated to a workspace identity.
+- [x] Source-level handler check confirms every MCP upstream fetch is preceded by the limiter gate; rejection paths do not call upstream.
 
 ## Phase 6 — Credential lifecycle and follow-up hardening
 
@@ -93,7 +93,7 @@ The user has directed that automated tests be deferred for this immediate migrat
 
 ## Testing exception
 
-Automated tests are deferred for the immediate production migration at the user's direction. The implementation plan must not mark deferred tests as passed. Use read-only operational probes and record unverified runtime behavior. Testing becomes a release gate again for later feature work.
+PR #14 adds Auth and MCP rate-limit client tests. The MCP build and test workflow has passed for the latest test commit; the Auth workflow is still running at the time of this edit. These tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or concurrent consumption. Direct Durable Object tests and read-only production configuration checks remain release gates. Never run write-operation tests against a real customer workspace.
 
 ## Rate-limiting implementation
 
@@ -105,7 +105,9 @@ Automated tests are deferred for the immediate production migration at the user'
 - [x] Record upstream 429 cooldowns and honor Retry-After without automatic retries.
 - [ ] Confirm provider quota and configure finite runtime thresholds.
 - [ ] Set the identical HMAC secret on both Workers.
-- [ ] Run build checks and safe preview verification.
+- [x] Run CI build checks and package tests for the initial source commit.
+- [x] Add focused Auth and MCP rate-limit client tests; latest CI results are recorded in the PR and audit log.
+- [ ] Add direct Durable Object SQLite atomicity/concurrency tests and complete safe preview verification.
 - [ ] Complete operational verification before production rollout.
 
 The implementation is committed to source; the unchecked items remain production blockers.
