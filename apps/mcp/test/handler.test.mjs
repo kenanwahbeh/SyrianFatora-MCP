@@ -199,3 +199,52 @@ test("does not reveal upstream fetch exceptions or credentials", async () => {
   assert.equal(body.result.content[0].text.includes(apiKey), false);
   assert.equal(body.result.content[0].text, "SyrianFatora API request failed. Please retry later.");
 });
+
+
+test("fails closed when no rate limiter is provided", async () => {
+  let called = false;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: {},
+  }), props, {
+    fetchImpl: async () => { called = true; return Response.json({}); },
+  });
+
+  assert.equal(response.status, 503);
+  assert.equal(called, false);
+});
+
+test("blocks upstream calls when the shared quota is exhausted", async () => {
+  let called = false;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: {},
+  }), props, {
+    rateLimit: async () => ({ allowed: false, retryAfterSeconds: 23 }),
+    fetchImpl: async () => { called = true; return Response.json({}); },
+  });
+
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("Retry-After"), "23");
+  assert.equal(called, false);
+});
+
+test("records the provider Retry-After when upstream returns 429", async () => {
+  let recorded;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: {},
+  }), props, {
+    rateLimit: async () => ({ allowed: true }),
+    onUpstreamRateLimited: async (value) => { recorded = value; },
+    fetchImpl: async () => Response.json(
+      { message: "rate limited" },
+      { status: 429, headers: { "Retry-After": "12" } },
+    ),
+  });
+  const body = await json(response);
+
+  assert.equal(recorded, "12");
+  assert.equal(body.result.isError, true);
+  assert.equal(JSON.parse(body.result.content[0].text).status, 429);
+});
