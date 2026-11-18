@@ -11,6 +11,8 @@ const outboundRequests = [];
 
 before(async () => {
   miniflare = new Miniflare({
+    workers: [{
+    name: "auth",
     scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
     modules: true,
     compatibilityDate: "2026-11-17",
@@ -46,6 +48,7 @@ before(async () => {
       }
       return new Response("Unexpected outbound request blocked by test harness", { status: 502 });
     },
+    }],
   });
   await miniflare.ready;
 });
