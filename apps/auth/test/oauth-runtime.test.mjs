@@ -10,7 +10,7 @@ let miniflare;
 
 before(async () => {
   miniflare = new Miniflare(convertV4MiniflareOptions({
-    scriptPath: new URL("../src/index.mjs", import.meta.url).pathname,
+    scriptPath: new URL("../.cloudflare/output/v1/workers/default/bundle/index.js", import.meta.url).pathname,
     modules: true,
     compatibilityDate: "2026-11-17",
     compatibilityFlags: ["nodejs_compat", "global_fetch_strictly_public"],
