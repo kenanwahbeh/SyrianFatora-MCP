@@ -91,11 +91,10 @@ function reply(id, result) {
   });
 }
 
-function rpcError(id, code, message, status = 400) {
-  return Response.json({ jsonrpc: "2.0", id, error: { code, message } }, {
-    status,
-    headers: { "Cache-Control": "no-store" },
-  });
+function rpcError(id, code, message, status = 400, extraHeaders = {}) {
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, String(value));
+  return Response.json({ jsonrpc: "2.0", id, error: { code, message } }, { status, headers });
 }
 
 function toolError(id, message) {
@@ -159,6 +158,8 @@ function getToolParts(name) {
 export async function handleMcpRequest(request, props, {
   fetchImpl = fetch,
   requireWriteScope = () => true,
+  rateLimit,
+  onUpstreamRateLimited,
   maxRequestBytes = 1_048_576,
 } = {}) {
   const url = new URL(request.url);
@@ -291,6 +292,22 @@ export async function handleMcpRequest(request, props, {
     headers["Content-Type"] = "application/json";
   }
 
+  if (typeof rateLimit !== "function") {
+    return rpcError(id, -32000, "Upstream requests are temporarily unavailable.", 503);
+  }
+
+  try {
+    const decision = await rateLimit();
+    if (!decision?.allowed) {
+      const retryAfter = Math.max(1, Number(decision?.retryAfterSeconds) || 1);
+      return rpcError(id, -32029, "SyrianFatora request quota is temporarily exhausted. Retry later.", 429, {
+        "Retry-After": retryAfter,
+      });
+    }
+  } catch {
+    return rpcError(id, -32000, "Upstream requests are temporarily unavailable because rate limiting could not be verified.", 503);
+  }
+
   try {
     const upstream = await fetchImpl(target.toString(), {
       method,
@@ -298,6 +315,17 @@ export async function handleMcpRequest(request, props, {
       redirect: "error",
       ...(body !== undefined ? { body } : {}),
     });
+    if (upstream.status === 429) {
+      if (typeof onUpstreamRateLimited !== "function") {
+        return rpcError(id, -32000, "SyrianFatora rate-limited this workspace; cooldown could not be recorded.", 503);
+      }
+      try {
+        await onUpstreamRateLimited(upstream.headers.get("Retry-After"));
+      } catch {
+        return rpcError(id, -32000, "SyrianFatora rate-limited this workspace; cooldown could not be recorded.", 503);
+      }
+    }
+
     const raw = await readBoundedBody(upstream.body, 1_048_576);
     const safeRaw = raw.replaceAll(apiKey, "[REDACTED]");
     let data;

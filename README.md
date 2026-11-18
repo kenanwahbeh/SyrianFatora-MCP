@@ -2,55 +2,59 @@
 
 Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public API, hosted on Cloudflare Workers.
 
-> **Status:** The OAuth authorization Worker and OAuth-protected MCP resource-server implementation are merged into `main`. Both Workers now build successfully with the Cloudflare `cf build` workflow and have passing unit tests. Local Worker-runtime integration and end-to-end OAuth verification are still outstanding. The existing production Worker remains on its previously verified `1.1.0` baseline; the OAuth Workers are preview-only source and are not deployed or enabled in production.
+> **Project direction (2026-11-18):** Migrate the existing production MCP service in place. Keep the production Worker name `syrianfatora-mcp`, preserve its MCP endpoint identity and the existing 51 tools, and add OAuth 2.1 authorization. The MCP resource Worker remains the same service; a separate `syrianfatora-auth` Worker is required as the authorization server and connects to it through a Cloudflare Service Binding. Do not create a replacement MCP service.
 
-## Goals
+## Product goal
 
-- Expose SyrianFatora resources through a remote MCP endpoint.
-- Keep each user's SyrianFatora API key server-side; never put it in a plugin package, URL, browser storage, or source control.
-- Authenticate ChatGPT/MCP clients with a separate OAuth 2.1 authorization flow using Authorization Code + PKCE.
-- Bind each OAuth grant to the correct SyrianFatora workspace and API key.
-- Preserve existing MCP tools and their API semantics while adding authorization.
-- Provide revocation, safe token lifecycle handling, audit-friendly errors, and automated tests.
+Let a user connect their SyrianFatora workspace to ChatGPT or another compatible MCP client, then manage and read permitted billing resources through the existing MCP tool catalogue. Users must enter their SyrianFatora API key only on the first-party HTTPS authorization page; the key must never be pasted into chat, sent to the MCP client, or stored in a plugin package.
 
-## Current production baseline
+## Current status
 
-- Cloudflare Worker service: `syrianfatora-mcp`
-- Environment: `production`
-- Last verified deployment: `1.1.0`
-- Existing API authentication: SyrianFatora Bearer token supplied to the MCP request
-- Production bindings: none were present at the last inspection
-- No verified custom domain; do not assume the endpoint until it is probed.
+- OAuth authorization and MCP resource-server source code are already merged into `main`.
+- The MCP package preserves the existing 51 tools and enforces `mcp:read` / `mcp:write`.
+- Both packages have previously built successfully and their unit tests passed in CI. **The user has instructed that automated tests be deferred for the immediate production migration; this is not a claim that end-to-end OAuth has been tested.**
+- Local Worker-runtime integration and complete OAuth flow verification remain outstanding.
+- Production currently remains on the previously inspected legacy `1.1.0` Worker baseline. The OAuth code is not yet active in production.
+- The first production build attempt failed at deploy because the local config name `syrianfatora-mcp-oauth-preview` conflicted with the Cloudflare CI target `syrianfatora-mcp`; Cloudflare warned that the live script had been updated through the script API and aborted without applying the upload. Do not bypass this with an unreviewed `--force`.
 
-The OAuth authorization and resource-server packages under `apps/auth` and `apps/mcp` are source-only preview implementations. A change in GitHub does not deploy or modify the Cloudflare production Worker.
+## Agreed production architecture
 
-## Security rules
+- **Existing resource Worker:** `syrianfatora-mcp` — keep this exact production service name; migrate its code in place.
+- **Authorization Worker:** `syrianfatora-auth` — separate OAuth 2.1 authorization server, required by the Workers OAuth Provider v1 split architecture.
+- **Internal connection:** Cloudflare Service Binding from `syrianfatora-mcp` to the `SyrianFatoraAuth` entrypoint exported by `syrianfatora-auth`.
+- **OAuth:** Authorization Code + PKCE; scopes `mcp:read` and `mcp:write`; `offline_access` only if the client lifecycle requires it.
+- **Credential isolation:** provider-encrypted authorization `props`; never expose the upstream key to the client or create a plaintext credential record.
+- **Compatibility:** preserve the existing 51 MCP tool names and their SyrianFatora API semantics.
 
-1. Never commit real API keys, OAuth client secrets, signing keys, access tokens, or refresh tokens.
-2. Do not accept credentials in query strings.
-3. Use HTTPS only; validate redirect URIs exactly and require PKCE `S256`.
-4. Store user credentials and OAuth grants server-side using an appropriate encrypted/secure storage design.
-5. Return only opaque or appropriately scoped OAuth tokens to the MCP client; never expose the upstream SyrianFatora key.
-6. Do not run write operations against a real SyrianFatora workspace during smoke tests.
-7. Do not alter production bindings, routes, DNS, or deployments until the implementation and tests are reviewed and production changes are explicitly approved.
+## Production migration rules
+
+1. Keep the existing `syrianfatora-mcp` Worker name and production identity.
+2. Do not create a second MCP resource Worker as a replacement.
+3. Create the separate authorization Worker only as the OAuth architecture dependency.
+4. Determine and record the real production Worker URLs, account Worker subdomain, and KV namespace ID from Cloudflare. Never invent URLs or IDs and never deploy `.invalid` placeholders.
+5. Configure the auth Worker, KV binding, MCP public resource URL, auth issuer URL, and Service Binding consistently.
+6. Preserve a rollback path to the exact current production script/version before replacing the live MCP script.
+7. Do not use `--force` to silence a script-API conflict until the live baseline is captured and the exact overwrite is understood.
+8. Automated tests are deferred for this immediate migration at the user's direction. Record this as a testing exception, not a passing result. Do not run destructive/write smoke tests against a real SyrianFatora workspace.
+9. Record every Cloudflare resource created or changed, deployment/version ID, probe result, and rollback reference in [the production migration log](docs/production-migration.md).
+10. Never put API keys, OAuth tokens, signing keys, KV secrets, or Cloudflare credentials in Git, issues, logs, or chat.
 
 ## Project documents
 
 - [Architecture](docs/architecture.md)
 - [Security model](docs/security.md)
 - [Implementation plan and acceptance criteria](docs/implementation-plan.md)
+- [Production migration runbook and log](docs/production-migration.md)
+- [Architecture decisions](docs/adr/)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
 ## Development
 
-- Keep changes focused and document behavior, security assumptions, and testing.
-- Run the tests relevant to the changed component before opening a pull request.
-- Authorization-worker unit tests: `cd apps/auth && npm test`.
-- MCP resource-worker unit tests: `cd apps/mcp && npm test`.
-- Both Worker packages use the Cloudflare `cf` CLI and Cloudflare Vite plugin v2; `npm run build:check` runs `cf build` and does not deploy.
-- CI installs locked dependencies, builds both Workers with `cf build`, and runs their unit tests.
-- OAuth provider integration tests, Service Binding validation, and a complete end-to-end authorization flow remain outstanding.
+- MCP Worker: `cd apps/mcp && npm run build:check && npm test`.
+- Authorization Worker: `cd apps/auth && npm run build:check && npm test`.
+- Build checks use Cloudflare `cf build`; they do not deploy.
+- Automated tests are currently deferred for the immediate production migration by explicit user direction. Restore the test gate before subsequent feature releases.
 - Never use a production workspace for write-operation tests.
 
 ## License

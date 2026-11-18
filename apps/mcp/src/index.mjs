@@ -4,6 +4,7 @@ import {
 } from "@cloudflare/workers-oauth-provider";
 import { env } from "cloudflare:workers";
 import { handleMcpRequest } from "./handler.mjs";
+import { consumeMcpRequest, recordUpstreamRateLimit } from "./rate-limit-client.mjs";
 
 const resourceServer = new OAuthResourceServer({
   resourceMetadata: {
@@ -23,6 +24,9 @@ const resourceServer = new OAuthResourceServer({
         requireWriteScope: () => ctx.auth.scope.includes("mcp:write")
           ? null
           : insufficientScope(ctx.auth, ["mcp:read", "mcp:write"]),
+        rateLimit: () => consumeMcpRequest(workerEnv, ctx.props),
+        onUpstreamRateLimited: (retryAfter) =>
+          recordUpstreamRateLimit(workerEnv, ctx.props, retryAfter),
       });
     },
   },

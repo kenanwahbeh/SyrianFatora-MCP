@@ -3,6 +3,7 @@ import {
   OAuthAuthorizationServer,
 } from "@cloudflare/workers-oauth-provider";
 import { WorkerEntrypoint, env } from "cloudflare:workers";
+import { enforceAuthorizationRateLimit, RateLimitError } from "./rate-limit-client.mjs";
 import {
   CredentialValidationError,
   escapeHtml,
@@ -124,6 +125,7 @@ async function authorize(request, workerEnv) {
     SUPPORTED_SCOPES,
   );
   const apiKey = String(form.get("api_key") ?? "").trim();
+  await enforceAuthorizationRateLimit(request, apiKey, workerEnv);
   await validateSyrianFatoraKey(apiKey);
 
   const approved = await oauth.approveConsent(request, handle, {
@@ -181,6 +183,17 @@ export class SyrianFatoraAuth extends WorkerEntrypoint {
         });
       }
 
+      if (error instanceof RateLimitError) {
+        const headers = securityHeaders(new Headers({ "Content-Type": "text/plain; charset=utf-8" }));
+        if (error.retryAfterSeconds) headers.set("Retry-After", String(error.retryAfterSeconds));
+        return new Response(
+          error.status === 429
+            ? "Too many authorization attempts. Wait before trying again."
+            : "Authorization is temporarily unavailable. Please try again later.",
+          { status: error.status, headers },
+        );
+      }
+
       if (error instanceof CredentialValidationError) {
         return new Response(errorPage(error.message), {
           status: error.status,
@@ -204,5 +217,7 @@ export class SyrianFatoraAuth extends WorkerEntrypoint {
   }
 }
 
+
+export { CredentialRateLimiter } from "./rate-limit.mjs";
 
 export default SyrianFatoraAuth;
