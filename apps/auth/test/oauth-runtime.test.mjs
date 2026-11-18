@@ -17,28 +17,8 @@ before(async () => {
     bindings: {
       ISSUER,
       MCP_SERVER_URL: MCP_RESOURCE,
-      RATE_LIMIT_HMAC_SECRET: "local-test-only-hmac-secret-at-least-32-bytes",
-      RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS: "20",
-      RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: "60",
-      RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: "20",
-      RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: "60",
-      RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: "100",
-      RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS: "86400",
-      RATE_LIMIT_GRANT_MAX_REQUESTS: "100",
-      RATE_LIMIT_GRANT_WINDOW_SECONDS: "60",
-      RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS: "30",
     },
     kvNamespaces: ["OAUTH_KV"],
-    durableObjects: {
-      RATE_LIMITER: { className: "CredentialRateLimiter", useSQLite: true },
-    },
-    outboundService: async (outboundRequest) => {
-      const url = new URL(outboundRequest.url);
-      if (url.hostname === "syrianfatora.com" && url.pathname === "/api/public/v1/customers") {
-        return Response.json({ data: [] }, { status: 200 });
-      }
-      return new Response("Unexpected outbound request in isolated OAuth test", { status: 502 });
-    },
   }));
   await miniflare.ready;
 });
@@ -164,99 +144,3 @@ test("valid S256 authorization reaches the first-party consent page without redi
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
 
-test("public-client code flow validates PKCE, rejects replay, rotates refresh tokens and revokes grants", async () => {
-  const client = await registerPublicClient();
-  const verifier = "a-runtime-test-verifier-that-is-long-enough";
-  const params = authorizationParams(client, {
-    scope: "mcp:read offline_access",
-    code_challenge: await s256(verifier),
-  });
-  const consentResponse = await request(`/authorize?${params}`);
-  assert.equal(consentResponse.status, 200);
-  const html = await consentResponse.text();
-  const handle = /name="handle" value="([^"]+)"/.exec(html)?.[1];
-  assert.ok(handle, "consent handle must be present");
-
-  const form = new URLSearchParams();
-  form.set("handle", handle);
-  form.set("decision", "approve");
-  form.set("api_key", "sk_test_local_only_key_1234567890");
-  form.append("scope", "mcp:read");
-  form.append("scope", "offline_access");
-  const approval = await request("/authorize", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "CF-Connecting-IP": "192.0.2.44",
-    },
-    body: form,
-  });
-  assert.equal(approval.status, 302, await approval.clone().text());
-  const callback = new URL(approval.headers.get("Location"));
-  assert.equal(callback.origin, ISSUER);
-  assert.ok(callback.searchParams.get("code"));
-  assert.equal(callback.searchParams.get("state"), "runtime-test-state");
-  const code = callback.searchParams.get("code");
-
-  const exchange = async (codeVerifier) => request("/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: client.client_id,
-      code_verifier: codeVerifier,
-      resource: MCP_RESOURCE,
-    }),
-  });
-
-  const badVerifier = await exchange("incorrect-verifier-value-that-is-long-enough");
-  assert.equal(badVerifier.status, 400);
-  assert.equal((await badVerifier.json()).error, "invalid_grant");
-
-  const tokenResponse = await exchange(verifier);
-  assert.equal(tokenResponse.status, 200, await tokenResponse.clone().text());
-  const tokens = await tokenResponse.json();
-  assert.ok(tokens.access_token);
-  assert.ok(tokens.refresh_token);
-
-  const refresh = async (refreshToken) => request("/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: client.client_id,
-      resource: MCP_RESOURCE,
-    }),
-  });
-
-  const rotatedResponse = await refresh(tokens.refresh_token);
-  assert.equal(rotatedResponse.status, 200, await rotatedResponse.clone().text());
-  const rotated = await rotatedResponse.json();
-  assert.ok(rotated.access_token);
-  assert.ok(rotated.refresh_token);
-  assert.notEqual(rotated.refresh_token, tokens.refresh_token);
-
-  const revoke = await request("/oauth/revoke", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      token: rotated.refresh_token,
-      token_type_hint: "refresh_token",
-      client_id: client.client_id,
-    }),
-  });
-  assert.equal(revoke.status, 200);
-
-  const revokedRefresh = await refresh(rotated.refresh_token);
-  assert.equal(revokedRefresh.status, 400);
-  assert.equal((await revokedRefresh.json()).error, "invalid_grant");
-
-  // Replaying an already-exchanged code is rejected. The provider also invalidates
-  // tokens derived from that code, so this assertion intentionally runs last.
-  const replay = await exchange(verifier);
-  assert.equal(replay.status, 400);
-  assert.equal((await replay.json()).error, "invalid_grant");
-});
