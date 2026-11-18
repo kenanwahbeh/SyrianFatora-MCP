@@ -446,6 +446,14 @@ test("resource-server validation isolates grants by their stored upstream creden
   assert.equal(dataA.props.upstreamApiKey, TEST_KEYS[0]);
   assert.equal(dataB.props.upstreamApiKey, TEST_KEYS[1]);
   assert.notEqual(dataA.props.grantSubject, dataB.props.grantSubject);
+
+  const revoked = await revokeToken(clientA, tokensA.access_token, "access_token");
+  assert.equal(revoked.status, 200, await revoked.clone().text());
+
+  const revokedA = await resourceValidate(tokensA.access_token);
+  const stillValidB = await resourceValidate(tokensB.access_token);
+  assert.equal(revokedA.status, 401, await revokedA.clone().text());
+  assert.equal(stillValidB.status, 200, await stillValidB.clone().text());
 });
 
 test("refresh tokens rotate and the previous refresh token is rejected", async () => {
