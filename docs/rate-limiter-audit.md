@@ -1,6 +1,6 @@
 # Rate-limiter audit — PR #14
 
-**Status:** Source/configuration audit expanded; focused client tests added. Latest test run for the added tests is pending.
+**Status:** Source/configuration audit expanded; focused client tests and both package build/test workflows passed.
 **Scope:** OAuth authorization Worker, MCP resource Worker, shared Durable Object coordinator.
 **Production impact:** None. This branch does not change production Cloudflare resources, DNS, or deployments.
 
@@ -53,3 +53,12 @@ This is an inventory, not a production-ready value set. All values must be expli
   - `apps/auth/test/rate-limit-client.test.mjs`
   - `apps/mcp/test/rate-limit-client.test.mjs`
 - The initial PR commit's CI completed successfully for both packages, including build checks and existing tests. That run predates the new focused tests and must not be treated as validation of them.
+
+
+## GitHub Actions results
+
+For commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda` (the code/test changes; later commits only update documentation):
+
+- MCP Resource Worker tests: run #59, conclusion **success**. Dependency install, `npm run build:check`, and `npm test` all completed successfully.
+- Auth Worker tests: run #74, conclusion **success**. Dependency install, `npm run build:check`, and `npm test` all completed successfully.
+- These runs validate the new client-level tests and package builds. They do not validate live Cloudflare bindings, deployed secret parity, Durable Object SQLite concurrency, or production quota values.
