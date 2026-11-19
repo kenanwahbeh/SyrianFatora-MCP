@@ -34,7 +34,7 @@ The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` a
 - MCP `/health`: HTTP 200; reports 51 tools.
 - MCP protected-resource metadata: HTTP 200 at `/.well-known/oauth-protected-resource/mcp`; advertises the Auth issuer.
 - MCP request with a deliberately invalid bearer token: HTTP 401.
-- GitHub Actions production smoke run: `44456841885`, completed successfully on 2026-11-19.
+- GitHub Actions production smoke runs `44456841885` (initial cutover) and `44457599094` (after final MCP version 6 and preview-URL disablement) both completed successfully on 2026-11-19.
 - Auth unit tests: 40/40 pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
 - MCP unit tests: 21/21 pass.
 - `npm audit --audit-level=high`: zero vulnerabilities for both packages using npm 10.9.2, matching Cloudflare Build.
