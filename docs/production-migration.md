@@ -25,6 +25,8 @@
 
 The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` and `RATE_LIMITER` bound to the Auth Worker's SQLite Durable Object namespace. The Auth Worker has the production KV binding and the same HMAC secret. No custom domain or DNS record was changed.
 
+**Rollback note:** MCP version 4 is the captured pre-migration production script with the shared secret already present; it is the rollback target for the in-place MCP code migration. The Auth Worker did not exist before this cutover: versions 1 and 2 were bootstrap placeholders, and version 3 is its first functional production release. There is no earlier functional Auth version to roll back to; preserve version 3 as the known-good baseline for subsequent releases.
+
 ### Verification
 
 - Auth `/health`: HTTP 200.
