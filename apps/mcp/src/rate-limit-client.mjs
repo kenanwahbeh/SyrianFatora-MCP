@@ -10,29 +10,29 @@ function stubFor(env, name) {
   if (!env.RATE_LIMITER || typeof env.RATE_LIMITER.idFromName !== "function") throw new Error("Rate limiter binding is missing.");
   return env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName(name));
 }
-async function identities(env, props) {
+async function credentialStub(env, props) {
   const secret = env.RATE_LIMIT_HMAC_SECRET;
-  if (typeof secret !== "string" || new TextEncoder().encode(secret).byteLength < 32) throw new Error("Rate-limit secret is missing.");
+  if (typeof secret !== "string" || new TextEncoder().encode(secret).byteLength < 32) {
+    throw new Error("Rate-limit secret is missing.");
+  }
   const apiKey = props?.provider === "syrianfatora" ? props.upstreamApiKey : null;
-  const grantSubject = props?.grantSubject;
-  if (typeof apiKey !== "string" || apiKey.length < 20 || apiKey.length > 512 || typeof grantSubject !== "string" || !grantSubject) {
-    throw new Error("Authorization grant identity is invalid.");
+  if (typeof apiKey !== "string" || apiKey.length < 20 || apiKey.length > 512) {
+    throw new Error("Authorization credential is invalid.");
   }
   const credentialHash = await fingerprint(secret, "credential", apiKey);
-  const grantHash = await fingerprint(secret, "grant", grantSubject);
-  return { stub: stubFor(env, "credential:" + credentialHash), grantFingerprint: grantHash };
+  return stubFor(env, "credential:" + credentialHash);
 }
 export async function consumeMcpRequest(env, props) {
   try {
-    const { stub, grantFingerprint } = await identities(env, props);
-    return await stub.consumeProxy({ grantFingerprint });
+    const stub = await credentialStub(env, props);
+    return await stub.checkUpstreamCooldown();
   } catch {
     throw new Error("Rate limiter unavailable.");
   }
 }
 export async function recordUpstreamRateLimit(env, props, retryAfterHeader) {
   try {
-    const { stub } = await identities(env, props);
+    const stub = await credentialStub(env, props);
     return await stub.recordUpstream429({ retryAfterHeader });
   } catch {
     throw new Error("Rate limiter unavailable.");
