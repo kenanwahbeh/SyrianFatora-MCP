@@ -68,7 +68,7 @@ test("authorization credential protection counts attempts only, not MCP workspac
   assert.equal(first.allowed, true);
   assert.equal(second.allowed, true);
   assert.equal(third.allowed, false);
-  assert.equal(third.reason, "quota_exceeded");
+  assert.equal(third.reason, "attempt_limit_exceeded");
   const rows = await storage.exec("SELECT bucket, COUNT(*) AS count FROM rate_events GROUP BY bucket ORDER BY bucket");
   const counts = Object.fromEntries(rows.map((row) => [row.bucket, Number(row.count)]));
   assert.equal(counts.auth_credential_attempts, 2);
