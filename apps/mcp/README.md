@@ -5,9 +5,14 @@ This package is the OAuth-protected resource server for the existing production 
 ## Production identity — do not change
 
 - Cloudflare production Worker name: `syrianfatora-mcp`.
-- This is the existing MCP resource service and must be migrated in place.
-- Do not deploy a second MCP Worker as a replacement or use the preview name in production.
+- Public MCP endpoint: https://syrianfatora-mcp.kinan-api.workers.dev/mcp.
+- This is the existing MCP resource service, migrated in place.
+- Do not deploy a second MCP Worker as a replacement or use the Preview name in production.
 - Preserve the existing public MCP endpoint identity and all 51 tool definitions.
+- Current production version: `392a040a-eff8-421d-952b-0075dc74e703` (version 6).
+- Current deployment: `6fe36215-6e5d-4368-8744-ea90473b78c3`.
+- Previous rollback version captured before the migration: `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (version 4).
+- Production workers.dev route is enabled; public version-preview URLs are disabled.
 
 ## What it does
 
@@ -22,14 +27,16 @@ This package is the OAuth-protected resource server for the existing production 
 
 ## Production runtime configuration
 
-The production configuration must use:
+| Binding / variable | Production value |
+| --- | --- |
+| Worker name | `syrianfatora-mcp` |
+| `MCP_SERVER_URL` | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
+| `AUTH_SERVER_URL` | `https://syrianfatora-auth.kinan-api.workers.dev` |
+| `AUTH_SERVER` | Service Binding to Worker `syrianfatora-auth`, entrypoint `SyrianFatoraAuth` |
+| `RATE_LIMITER` | Durable Object `CredentialRateLimiter` in `syrianfatora-auth`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
+| `RATE_LIMIT_HMAC_SECRET` | Secret text; same random 48-byte value as the Auth Worker |
 
-- Worker name: `syrianfatora-mcp`.
-- `MCP_SERVER_URL`: exact existing public HTTPS MCP URL, including `/mcp`.
-- `AUTH_SERVER_URL`: exact production authorization issuer origin, without a trailing slash.
-- `AUTH_SERVER`: Service Binding to Worker `syrianfatora-auth`, entrypoint `SyrianFatoraAuth`.
-
-The current checked-in config is still preview-only and contains `.invalid` URLs. It must not be deployed to production unchanged. Replace placeholders only after the actual URLs and Cloudflare resource names are verified. The existing production Worker name must remain unchanged.
+The Cloudflare deployment output and live Worker settings confirm both the Service Binding and Durable Object binding. The MCP Worker has no local daily/monthly/per-key/per-grant usage quota bindings.
 
 ## Scope enforcement
 
@@ -40,32 +47,27 @@ The current checked-in config is still preview-only and contains `.invalid` URLs
 
 Cloudflare's requiredScopes metadata is advertised to clients; this Worker explicitly enforces scopes in its handler as well.
 
-## Mandatory upstream rate limiting
+## Provider-owned quota
 
-Every upstream fetch from the MCP handler must pass a limiter before the request is sent. The strict quota identity is a keyed HMAC fingerprint of the upstream API credential, not the random OAuth grant subject, so multiple grants cannot multiply one workspace's allowance. Use a Durable Object to coordinate the strict per-credential budget across requests and Cloudflare locations, with a separate per-grant burst gate. Share the same credential budget with authorization-key validation. Fail closed when the limiter is unavailable and honor upstream 429 / Retry-After with a per-credential cooldown.
+SyrianFatora is the sole authority for workspace API quota. This Worker must not apply local per-credential request quotas, per-OAuth-grant quotas, or local daily/monthly caps. Normal MCP requests are not counted by a local usage limiter.
 
-The current source does not yet implement this control. Production deployment is blocked until implementation and verification.
+Before an upstream call, the Worker checks only whether SyrianFatora previously returned HTTP 429 with a valid `Retry-After` value for this credential. If so, it returns a controlled 429 with the provider-specified `Retry-After`. No local fallback duration is invented. If the provider did not supply a valid `Retry-After`, no local cooldown is created. The Worker never automatically retries upstream requests.
 
-## Build and testing
+The credential HMAC fingerprint is used only to scope authorization anti-abuse and provider-directed cooldown state. It is not a workspace identity or quota counter.
 
-`npm run build:check` validates the Worker build without deploying; `npm test` runs unit tests. The user has deferred automated tests for the immediate production migration. Do not describe this as successful end-to-end OAuth verification. Use only safe, read-only production probes.
+## Build, testing, and production verification
 
-## Enforced shared rate limiting
+- `npm audit --audit-level=high`: zero vulnerabilities in the current dependency tree with npm 10.9.2.
+- `npm run build:check`: production Worker build succeeds without deployment.
+- `npm test`: 21 MCP tests pass.
+- Production smoke checks pass for MCP health, OAuth protected-resource metadata at `/.well-known/oauth-protected-resource/mcp`, 51 tools reported by health, and rejection of an invalid bearer token with HTTP 401.
+- **Not yet verified:** successful authenticated `initialize` and `tools/list` using a token issued after validating a real SyrianFatora workspace API key. Do not paste a real key into chat.
+- Never use a production workspace for write-operation tests.
 
-Before every upstream SyrianFatora fetch, the handler calls the shared CredentialRateLimiter Durable Object exported by syrianfatora-auth-preview. It atomically checks the credential-wide sliding window and the per-grant sliding window. The credential-wide counter is shared with the authorization Worker, so multiple grants cannot multiply one workspace's allowance.
+## Provider response headers
 
-The MCP Worker requires the same RATE_LIMIT_HMAC_SECRET value as the authorization Worker. If the Durable Object binding, secret, grant identity or coordinator is unavailable, the handler returns a controlled 503 and does not call SyrianFatora. Quota exhaustion returns 429 with Retry-After.
-
-An upstream 429 is recorded as a per-credential cooldown using the provider's Retry-After value, or the configured fallback cooldown. The handler never retries the upstream request automatically.
-
-## Upstream quota scope
-
-SyrianFatora documents a default daily quota of 1,000 successful requests per workspace, with increases available on request, plus a plan-dependent monthly quota for paid plans. The provider returns X-RateLimit-Limit and X-RateLimit-Remaining on responses and Retry-After on 429. The local limiter is an additional conservative gate; the provider remains authoritative for the monthly plan quota.
-
-Important: the current local budget is keyed by API-key fingerprint, while the provider describes its quota as workspace-wide. Do not issue multiple API keys for one workspace through this integration until a stable workspace identity is available or the keys are otherwise grouped under one limiter identity.
-
-Provider documentation: https://syrianfatora.com/developers
+The MCP response includes SyrianFatora's `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` values when present. Those provider values are authoritative. The MCP Worker does not calculate or replace workspace quota locally.
 
 ## Preview deployment
 
-This application has an isolated Cloudflare Preview Worker. The associated Build configuration is pinned to the `test/durable-object-atomicity` branch. Production deployment is intentionally disabled in this configuration.
+The isolated Preview Worker is separate from production and remains pinned to the `test/durable-object-atomicity` branch. The production Build trigger targets `main` and deploys the existing `syrianfatora-mcp` Worker in place. Public version-preview URLs are disabled for production.

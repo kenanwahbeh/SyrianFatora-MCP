@@ -1,0 +1,109 @@
+name: Production OAuth and MCP smoke tests
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/production-smoke.yml"
+      - "apps/auth/cloudflare.config.ts"
+      - "apps/mcp/cloudflare.config.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AUTH_ORIGIN: https://syrianfatora-auth.kinan-api.workers.dev
+      MCP_ORIGIN: https://syrianfatora-mcp.kinan-api.workers.dev
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Verify production health, OAuth discovery, and invalid-token rejection
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+
+          const authOrigin = process.env.AUTH_ORIGIN;
+          const mcpOrigin = process.env.MCP_ORIGIN;
+          const authResource = `${mcpOrigin}/mcp`;
+
+          async function json200(url) {
+            const response = await fetch(url, { headers: { Accept: "application/json" } });
+            const body = await response.text();
+            assert.equal(response.status, 200, `${url} returned ${response.status}: ${body.slice(0, 500)}`);
+            return JSON.parse(body);
+          }
+
+          const authHealth = await json200(`${authOrigin}/health`);
+          assert.equal(authHealth.ok, true);
+          assert.equal(authHealth.service, "syrianfatora-auth");
+
+          const oauth = await json200(`${authOrigin}/.well-known/oauth-authorization-server`);
+          assert.equal(oauth.issuer, authOrigin);
+          assert.equal(oauth.authorization_endpoint, `${authOrigin}/authorize`);
+          assert.equal(oauth.token_endpoint, `${authOrigin}/oauth/token`);
+          assert.ok(oauth.scopes_supported.includes("mcp:read"));
+          assert.ok(oauth.scopes_supported.includes("mcp:write"));
+
+          const mcpHealth = await json200(`${mcpOrigin}/health`);
+          assert.equal(mcpHealth.ok, true);
+          assert.equal(mcpHealth.service, "syrianfatora-mcp");
+          assert.equal(mcpHealth.toolCount, 51);
+
+          let protectedResource;
+          let metadataUrl;
+          for (const candidate of [
+            `${mcpOrigin}/.well-known/oauth-protected-resource/mcp`,
+            `${mcpOrigin}/.well-known/oauth-protected-resource`,
+          ]) {
+            const response = await fetch(candidate, { headers: { Accept: "application/json" } });
+            if (response.status === 404) continue;
+            const body = await response.text();
+            assert.equal(response.status, 200, `${candidate} returned ${response.status}: ${body.slice(0, 500)}`);
+            protectedResource = JSON.parse(body);
+            metadataUrl = candidate;
+            break;
+          }
+          assert.ok(protectedResource, "OAuth protected-resource metadata endpoint was not found");
+          assert.equal(protectedResource.resource, authResource);
+          assert.ok(protectedResource.authorization_servers.includes(authOrigin));
+
+          const initialize = {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2025-03-26",
+              capabilities: {},
+              clientInfo: { name: "production-smoke-test", version: "1.0.0" },
+            },
+          };
+          const invalidTokenResponse = await fetch(`${mcpOrigin}/mcp`, {
+            method: "POST",
+            headers: {
+              Authorization: "Bearer deliberately-invalid-smoke-token",
+              "Content-Type": "application/json",
+              Accept: "application/json, text/event-stream",
+            },
+            body: JSON.stringify(initialize),
+          });
+          assert.equal(invalidTokenResponse.status, 401, "MCP must reject an invalid bearer token");
+
+          console.log(JSON.stringify({
+            authHealth: "ok",
+            oauthDiscovery: "ok",
+            mcpHealth: "ok",
+            toolsAdvertisedByHealth: mcpHealth.toolCount,
+            protectedResourceMetadata: metadataUrl,
+            invalidTokenRejected: true,
+          }, null, 2));
+          NODE

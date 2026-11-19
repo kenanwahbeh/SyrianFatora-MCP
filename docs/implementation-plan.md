@@ -58,18 +58,20 @@ PR #14 adds focused Auth and MCP rate-limit client tests and both package CI wor
 - [ ] Remove legacy static Bearer-key instructions.
 - [ ] Complete a real ChatGPT OAuth connection and record the observed result.
 
-## Phase 5 — Rate limiting and upstream quota protection (production blocker)
+## Phase 5 — Provider-owned workspace quota and authorization abuse protection
 
-- [x] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
-- [x] Add IP and repeated credential-fingerprint attempt gates for `POST /authorize`.
-- [x] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
-- [x] Implement the coordinator as a SQLite-backed Durable Object; multi-bucket checks and inserts run in `transactionSync()`. Direct concurrency/atomicity tests remain outstanding.
-- [x] Add per-grant sliding-window limits for MCP clients in addition to the shared credential bucket.
-- [x] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
-- [x] Honor SyrianFatora 429 and Retry-After; record per-credential cooldown without automatic retries.
-- [ ] Set finite configurable thresholds using the actual workspace quota and legitimate usage assumptions; no values are guessed.
-- [x] Source-level identity check confirms grants using the same API key target the same credential Durable Object. Different API keys are not aggregated to a workspace identity.
-- [x] Source-level handler check confirms every MCP upstream fetch is preceded by the limiter gate; rejection paths do not call upstream.
+- [x] Remove local per-credential request quotas from normal MCP traffic.
+- [x] Remove per-OAuth-grant sliding-window request quotas.
+- [x] Keep IP-based protection against repeated authorization submissions.
+- [x] Keep credential-fingerprint protection against repeated API-key validation attempts during authorization only.
+- [x] Use the HMAC fingerprint only for authorization-attempt protection and provider-directed cooldown state; do not treat it as a workspace identity.
+- [x] Check for an active cooldown before an MCP upstream call only when it was created from SyrianFatora's own 429 Retry-After response.
+- [x] Do not invent a fallback cooldown when Retry-After is absent or invalid.
+- [x] Do not automatically retry provider 429 responses.
+- [ ] Verify the revised Auth and MCP builds/tests and inspect the final diff.
+- [ ] Verify generated Durable Object migration metadata and the remaining production bindings/secrets before any production deployment.
+
+SyrianFatora is the sole authority for workspace request quotas. The integration must not meter normal MCP requests locally or impose a competing daily/monthly/per-key/per-grant cap.
 
 ## Phase 6 — Credential lifecycle and follow-up hardening
 
@@ -81,7 +83,7 @@ PR #14 adds focused Auth and MCP rate-limit client tests and both package CI wor
 
 ## Production safety and stop conditions
 
-- Production rollout is blocked until rate limiting is implemented at both `POST /authorize` before credential validation and MCP before every upstream proxy call. Documentation alone is not enforcement.
+- Production rollout must verify the remaining authorization-attempt abuse guard and provider-directed 429 cooldown bindings. Normal MCP traffic must not be charged against a local request quota; SyrianFatora is the sole workspace quota authority.
 
 - Never deploy `.invalid` placeholders.
 - Never guess public URLs, Worker subdomains, or KV namespace IDs.
@@ -95,30 +97,24 @@ PR #14 adds focused Auth and MCP rate-limit client tests and both package CI wor
 
 PR #14 adds Auth and MCP rate-limit client tests. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: each completed dependency installation, `npm run build:check`, and `npm test`. These tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or concurrent consumption. Direct Durable Object tests and read-only production configuration checks remain release gates. Never run write-operation tests against a real customer workspace.
 
-## Rate-limiting implementation
+## Remaining guard implementation
 
-- [x] Add a shared SQLite Durable Object coordinator hosted by the authorization Worker.
-- [x] Gate authorization approval before SyrianFatora key validation using IP and credential-attempt sliding windows.
-- [x] Gate every MCP upstream fetch using the same credential-wide budget plus a per-grant sliding window.
-- [x] Use keyed HMAC-SHA-256 identities; never persist raw credentials, IP addresses or grant subjects in limiter storage.
-- [x] Fail closed when configuration or the coordinator is unavailable; return controlled 429/503 responses.
-- [x] Record upstream 429 cooldowns and honor Retry-After without automatic retries.
-- [ ] Confirm this workspace's actual provider quota and configure finite runtime thresholds.
-- [ ] Set the identical HMAC secret on both Workers.
-- [x] Run CI build checks and package tests for the initial source commit.
-- [x] Add focused Auth and MCP rate-limit client tests; latest CI results are recorded in the PR and audit log.
-- [ ] Add direct Durable Object SQLite atomicity/concurrency tests and complete safe preview verification.
-- [ ] Complete operational verification before production rollout, including deployed bindings, identical HMAC secret provisioning, and generated migration metadata.
+- [x] Keep a SQLite-backed Durable Object for authorization IP and credential-attempt abuse protection.
+- [x] Keep the same HMAC secret for privacy-preserving credential identity across the Auth and MCP Workers.
+- [x] Use the Durable Object for provider-directed 429 cooldown state only; do not count ordinary MCP requests.
+- [x] Remove per-credential and per-grant MCP usage counters and their configuration.
+- [x] Remove the local fallback cooldown; only honor a valid provider Retry-After value.
+- [ ] Re-run both package build checks and test suites after this change.
+- [ ] Verify generated Durable Object migration metadata and production bindings/secrets before rollout.
 
-The implementation is committed to source; the unchecked items remain production blockers.
+The remaining local controls are not workspace quota enforcement. No local quota thresholds or cross-key workspace identity are required.
 
 ## Provider quota confirmation
 
-- [x] Confirmed from the official SyrianFatora developer documentation: default daily quota is 1,000 requests per workspace; it may be increased on request. The documentation also says requests, including 429 responses, are recorded in usage/audit logs; this does not establish whether every 429 consumes the daily allowance.
-- [x] Confirmed paid plans add a monthly quota measured by billing cycle; no universal public numeric value is published.
-- [x] Confirmed response headers X-RateLimit-Limit and X-RateLimit-Remaining and 429 Retry-After.
-- [ ] Confirm this workspace's actual daily limit and plan-specific monthly quota.
-- [ ] Confirm one API key per workspace, or obtain a stable workspace ID so multiple keys share one limiter identity.
-- [ ] Decide whether to persist and expose provider quota headers for operational visibility.
+SyrianFatora owns the workspace quota and its enforcement. The integration must rely on the provider's own response status and headers, including HTTP 429 and Retry-After. Any published default daily quota or paid-plan allowance is informational only; it must not be copied into a competing local cap.
+
+The MCP Worker returns the provider's X-RateLimit-Limit and X-RateLimit-Remaining values when available. A local cooldown is stored only after an upstream 429 with a valid Retry-After value, and its duration is taken directly from that header. If the header is missing or invalid, no local cooldown is invented.
+
+The HMAC API-key fingerprint is used only for privacy-preserving authorization-attempt protection and provider-directed cooldown state. It is not a workspace identifier and is not used to count normal MCP requests.
 
 Provider source: https://syrianfatora.com/developers

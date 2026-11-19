@@ -1,5 +1,8 @@
 import { bindings, defineConfig } from "cf/config";
 
+const MCP_RESOURCE_URL = "https://syrianfatora-mcp.kinan-api.workers.dev/mcp";
+const AUTH_ORIGIN = "https://syrianfatora-auth.kinan-api.workers.dev";
+
 export default defineConfig(({ isPreview }) => ({
 	worker: {
 		name: isPreview ? "syrianfatora-mcp-oauth-preview" : "syrianfatora-mcp",
@@ -7,6 +10,7 @@ export default defineConfig(({ isPreview }) => ({
 		compatibilityFlags: ["nodejs_compat"],
 		entrypoint: "src/index.mjs",
 		workersDev: true,
+		previewUrls: isPreview,
 		observability: {
 			enabled: true,
 			redactQueryString: true,
@@ -17,12 +21,12 @@ export default defineConfig(({ isPreview }) => ({
 			MCP_SERVER_URL: bindings.text(
 				isPreview
 					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
-					: "https://replace-with-mcp-production-host.invalid/mcp",
+					: MCP_RESOURCE_URL,
 			),
 			AUTH_SERVER_URL: bindings.text(
 				isPreview
 					? "https://test-durable-object-atomicity-syrianfatora-auth-preview.kinan-api.workers.dev"
-					: "https://replace-with-auth-production-host.invalid",
+					: AUTH_ORIGIN,
 			),
 			RATE_LIMIT_HMAC_SECRET: bindings.secret(),
 			...(isPreview ? {
