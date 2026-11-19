@@ -58,18 +58,20 @@ PR #14 adds focused Auth and MCP rate-limit client tests and both package CI wor
 - [ ] Remove legacy static Bearer-key instructions.
 - [ ] Complete a real ChatGPT OAuth connection and record the observed result.
 
-## Phase 5 — Rate limiting and upstream quota protection (production blocker)
+## Phase 5 — Provider-owned workspace quota and authorization abuse protection
 
-- [x] Add an authorization approval rate-limit gate before `validateSyrianFatoraKey`; denied attempts must never reach SyrianFatora.
-- [x] Add IP and repeated credential-fingerprint attempt gates for `POST /authorize`.
-- [x] Add a strict per-credential quota coordinator shared by auth validation and MCP proxy calls, keyed by a server-side HMAC fingerprint of the upstream API key.
-- [x] Implement the coordinator as a SQLite-backed Durable Object; multi-bucket checks and inserts run in `transactionSync()`. Direct concurrency/atomicity tests remain outstanding.
-- [x] Add per-grant sliding-window limits for MCP clients in addition to the shared credential bucket.
-- [x] Fail closed if the strict limiter is unavailable; return controlled 429/503 responses and do not forward upstream.
-- [x] Honor SyrianFatora 429 and Retry-After; record per-credential cooldown without automatic retries.
-- [ ] Set finite configurable thresholds using the actual workspace quota and legitimate usage assumptions; no values are guessed.
-- [x] Source-level identity check confirms grants using the same API key target the same credential Durable Object. Different API keys are not aggregated to a workspace identity.
-- [x] Source-level handler check confirms every MCP upstream fetch is preceded by the limiter gate; rejection paths do not call upstream.
+- [x] Remove local per-credential request quotas from normal MCP traffic.
+- [x] Remove per-OAuth-grant sliding-window request quotas.
+- [x] Keep IP-based protection against repeated authorization submissions.
+- [x] Keep credential-fingerprint protection against repeated API-key validation attempts during authorization only.
+- [x] Use the HMAC fingerprint only for authorization-attempt protection and provider-directed cooldown state; do not treat it as a workspace identity.
+- [x] Check for an active cooldown before an MCP upstream call only when it was created from SyrianFatora's own 429 Retry-After response.
+- [x] Do not invent a fallback cooldown when Retry-After is absent or invalid.
+- [x] Do not automatically retry provider 429 responses.
+- [ ] Verify the revised Auth and MCP builds/tests and inspect the final diff.
+- [ ] Verify generated Durable Object migration metadata and the remaining production bindings/secrets before any production deployment.
+
+SyrianFatora is the sole authority for workspace request quotas. The integration must not meter normal MCP requests locally or impose a competing daily/monthly/per-key/per-grant cap.
 
 ## Phase 6 — Credential lifecycle and follow-up hardening
 
