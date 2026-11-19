@@ -34,7 +34,7 @@ test("authorization checks IP and credential buckets before validation", async (
   assert.equal(h.calls[1][0], "credential");
 });
 
-test("authorization attempt protection rejects repeated submissions returns 429 with retry information", async () => {
+test("authorization attempt protection rejects repeated submissions with 429 and retry information", async () => {
   const h = harness({ ipDecision: { allowed: false, retryAfterSeconds: 17 } });
   await assert.rejects(
     enforceAuthorizationAbuseProtection(request(), "sk_live_test_credential_1234567890", h.env),
