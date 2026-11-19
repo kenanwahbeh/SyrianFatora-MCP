@@ -161,7 +161,7 @@ Both triggers are path-scoped so documentation-only changes do not start product
 | 2026-11-18 | Inspected production Worker settings, versions, deployments, domains, workers.dev subdomain, and KV namespaces | Read-only; completed |
 | 2026-11-18 | Retrieved live `syrianfatora-mcp` script and compared with `src/worker-v1.1.0.mjs` | Exact source match |
 | 2026-11-18 | Checked Cloudflare KV namespace list | Initially empty |
-| 2026-11-18 | Created KV namespace `syrianfatora-oauth-production` | Created; ID `d19d9bd755c349f688cd55e299b8168f`; not yet bound to a Worker |
+| 2026-11-18 | Created KV namespace `syrianfatora-oauth-production` | Created; ID `d19d9bd755c349f688cd55e299b8168f`; at that pre-deployment point it was not yet bound |
 | 2026-11-18 | Inspected existing Cloudflare Build trigger | Root `/apps/mcp`; build `npm run build:check`; deploy `npx cf deploy --prebuilt --mode production`; branch `main`; only `apps/mcp/**` and its package manifests trigger it |
 | 2026-11-18 | Attempted to merge documentation PR #13 | GitHub blocked merge while CodeQL results were pending; no bypass attempted |
 | 2026-11-18 | Checked existing Worker domains | No MCP custom domain found |
@@ -201,7 +201,7 @@ Never record credential values or secret material in this file.
 
 The HMAC fingerprint is not a workspace identifier and is not used to meter API usage. No local daily/monthly/per-key/per-grant quota is enforced.
 
-No production Worker, route, DNS record, secret, binding, or customer workspace was changed by this source update. Build/test and deployment checks remain to be completed.
+Historical note for the source-only quota update before production cutover: no production Worker, route, DNS record, secret, binding, or customer workspace was changed by that commit. The production deployment and verification are recorded in the current-state section above.
 
 ### Preview configuration correction (2026-11-18)
 
