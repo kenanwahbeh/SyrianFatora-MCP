@@ -70,7 +70,7 @@ export class CredentialRateLimiter extends DurableObject {
           return {
             allowed: false,
             retryAfterSeconds: retryAfterSeconds(Number(row.oldest_event), entry.windowMs, now),
-            reason: "quota_exceeded",
+            reason: "attempt_limit_exceeded",
           };
         }
         accepted.push(entry);
