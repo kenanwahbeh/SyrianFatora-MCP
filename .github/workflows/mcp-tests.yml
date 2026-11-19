@@ -27,8 +27,12 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+      - name: Match Cloudflare Build npm version
+        run: npm install --global npm@10.9.2
       - name: Install pinned dependencies
         run: npm ci --no-audit --no-fund
+      - name: Enforce high-severity dependency audit
+        run: npm audit --audit-level=high
       - name: Build Worker with cf (no deployment)
         run: npm run build:check
       - name: Run MCP resource-worker tests

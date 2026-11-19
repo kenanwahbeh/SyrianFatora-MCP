@@ -1,5 +1,8 @@
 import { bindings, defineConfig, exports } from "cf/config";
 
+const AUTH_ORIGIN = "https://syrianfatora-auth.kinan-api.workers.dev";
+const MCP_RESOURCE_URL = "https://syrianfatora-mcp.kinan-api.workers.dev/mcp";
+
 export default defineConfig(({ isPreview }) => ({
 	worker: {
 		name: isPreview ? "syrianfatora-auth-preview" : "syrianfatora-auth",
@@ -22,24 +25,22 @@ export default defineConfig(({ isPreview }) => ({
 		env: {
 			ISSUER: bindings.text(
 				isPreview
-					? "https://fix-preview-oauth-endpoints-syrianfatora-auth-preview.kinan-api.workers.dev"
-					: "https://replace-with-auth-production-host.invalid",
+					? "https://test-durable-object-atomicity-syrianfatora-auth-preview.kinan-api.workers.dev"
+					: AUTH_ORIGIN,
 			),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
-					? "https://fix-preview-oauth-endpoints-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
-					: "https://replace-with-mcp-production-host.invalid/mcp",
+					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"
+					: MCP_RESOURCE_URL,
 			),
 			ACCESS_TOKEN_TTL_SECONDS: bindings.text("3600"),
 			REFRESH_TOKEN_TTL_SECONDS: bindings.text("2592000"),
 			CLIENT_REGISTRATION_TTL_SECONDS: bindings.text("7776000"),
-			...(isPreview ? {
-				// Preview-only protection against repeated authorization attempts.
-				RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS: bindings.text("7"),
-				RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: bindings.text("60"),
-				RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: bindings.text("2"),
-				RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: bindings.text("60"),
-			} : {}),
+			// Authorization-attempt abuse protection; these values do not meter MCP usage.
+			RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS: bindings.text("7"),
+			RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: bindings.text("60"),
+			RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: bindings.text("2"),
+			RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: bindings.text("60"),
 			RATE_LIMITER: bindings.durableObject({
 				worker: isPreview
 					? "syrianfatora-auth-preview"
