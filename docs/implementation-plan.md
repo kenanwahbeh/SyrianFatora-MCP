@@ -111,11 +111,10 @@ The remaining local controls are not workspace quota enforcement. No local quota
 
 ## Provider quota confirmation
 
-- [x] Confirmed from the official SyrianFatora developer documentation: default daily quota is 1,000 requests per workspace; it may be increased on request. The documentation also says requests, including 429 responses, are recorded in usage/audit logs; this does not establish whether every 429 consumes the daily allowance.
-- [x] Confirmed paid plans add a monthly quota measured by billing cycle; no universal public numeric value is published.
-- [x] Confirmed response headers X-RateLimit-Limit and X-RateLimit-Remaining and 429 Retry-After.
-- [ ] Confirm this workspace's actual daily limit and plan-specific monthly quota.
-- [ ] Confirm one API key per workspace, or obtain a stable workspace ID so multiple keys share one limiter identity.
-- [ ] Decide whether to persist and expose provider quota headers for operational visibility.
+SyrianFatora owns the workspace quota and its enforcement. The integration must rely on the provider's own response status and headers, including HTTP 429 and Retry-After. Any published default daily quota or paid-plan allowance is informational only; it must not be copied into a competing local cap.
+
+The MCP Worker returns the provider's X-RateLimit-Limit and X-RateLimit-Remaining values when available. A local cooldown is stored only after an upstream 429 with a valid Retry-After value, and its duration is taken directly from that header. If the header is missing or invalid, no local cooldown is invented.
+
+The HMAC API-key fingerprint is used only for privacy-preserving authorization-attempt protection and provider-directed cooldown state. It is not a workspace identifier and is not used to count normal MCP requests.
 
 Provider source: https://syrianfatora.com/developers
