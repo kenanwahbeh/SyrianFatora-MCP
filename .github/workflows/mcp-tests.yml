@@ -27,12 +27,12 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+      - name: Match Cloudflare Build npm version
+        run: npm install --global npm@10.9.2
       - name: Install pinned dependencies
         run: npm ci --no-audit --no-fund
-      - name: Report dependency advisories
-        run: |
-          npm audit --json > npm-audit.json || true
-          node -e "const a=JSON.parse(require('node:fs').readFileSync('npm-audit.json','utf8')); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities, vulnerabilities:Object.fromEntries(Object.entries(a.vulnerabilities??{}).map(([name,v])=>[name,{severity:v.severity,range:v.range,via:v.via,fixAvailable:v.fixAvailable}]))},null,2))"
+      - name: Enforce high-severity dependency audit
+        run: npm audit --audit-level=high
       - name: Build Worker with cf (no deployment)
         run: npm run build:check
       - name: Run MCP resource-worker tests
