@@ -161,16 +161,11 @@ No production Worker, route, DNS record, secret, binding, or customer workspace 
 
 The first CI build rejected Wrangler's top-level previews property because this repository uses the typed cf/config API. Both Worker configs now use defineConfig(({ isPreview }) => ...) and omit the RATE_LIMITER binding for Preview builds. Preview requests therefore fail closed before any SyrianFatora upstream call. The Preview command for this toolchain is cf previews deploy; do not use npx wrangler preview against these cf/config projects.
 
-## SyrianFatora quota findings (2026-11-18)
+## SyrianFatora quota handling
 
-Official developer documentation states:
-- Daily quota: 1,000 requests per workspace by default; can be raised on request. The documentation also says all requests, including 429 responses, are recorded in usage/audit logs; it does not establish that every 429 consumes the daily allowance.
-- Paid plans: additional monthly quota measured by billing cycle; public docs do not state one universal monthly limit.
-- Response headers: X-RateLimit-Limit and X-RateLimit-Remaining; 429 responses include Retry-After.
+SyrianFatora is the source of truth for workspace usage and quota. The MCP integration does not replicate published daily/monthly values as a local cap. It forwards normal requests and returns provider quota headers when present.
 
-Source: https://syrianfatora.com/developers
-
-The current local coordinator groups by API-key fingerprint, not workspace identity. It therefore shares quota across grants using the same key, but cannot yet unify multiple different keys belonging to the same workspace. Before production, confirm one key per workspace or obtain a stable workspace identifier from the provider. Set the local daily threshold from the actual workspace limit; do not assume the default if the workspace limit was raised.
+A local cooldown is recorded only from a valid provider Retry-After value after an upstream HTTP 429. No fallback cooldown is configured. Distinct API keys and OAuth grants do not create separate local request budgets because no local request budget exists.
 
 ## Branch build validation change (2026-11-18)
 
