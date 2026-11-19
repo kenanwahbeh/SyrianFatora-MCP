@@ -62,7 +62,7 @@ Set `RATE_LIMIT_HMAC_SECRET` on both Workers to the same random value of at leas
 
 A cooldown is stored only when SyrianFatora returns a valid `Retry-After` header. Its duration is taken from that header. There is no local fallback cooldown. If the provider omits or supplies an invalid header, no local cooldown is created.
 
-Preview retains isolated authorization-attempt thresholds. It does not define API usage quotas or fallback cooldown durations.
+Preview retains isolated authorization-attempt thresholds. It does not define API usage quotas or a fallback cooldown duration.
 
 ## Preview deployment
 
