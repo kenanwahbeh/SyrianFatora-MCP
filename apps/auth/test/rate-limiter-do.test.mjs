@@ -15,11 +15,6 @@ const config = {
   RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: "60",
   RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: "2",
   RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: "60",
-  RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: "1",
-  RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS: "60",
-  RATE_LIMIT_GRANT_MAX_REQUESTS: "5",
-  RATE_LIMIT_GRANT_WINDOW_SECONDS: "60",
-  RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS: "30",
 };
 let mf;
 let limiter;
@@ -58,7 +53,7 @@ before(async () => {
 
 after(async () => { await mf?.dispose(); await rm(bundleDir, { recursive: true, force: true }); });
 
-test("SQLite DO serializes concurrent attempts and enforces the strict limit", async () => {
+test("SQLite DO serializes concurrent authorization abuse attempts", async () => {
   const decisions = await Promise.all(Array.from({ length: 50 }, () => limiter.consumeIpAttempt()));
   assert.equal(decisions.filter((x) => x.allowed).length, 7);
   assert.equal(decisions.filter((x) => !x.allowed).length, 43);
@@ -66,21 +61,23 @@ test("SQLite DO serializes concurrent attempts and enforces the strict limit", a
   assert.equal(Number(rows[0].count), 7);
 });
 
-test("rejected multi-bucket attempts do not partially charge the earlier bucket", async () => {
+test("authorization credential protection counts attempts only, not MCP workspace usage", async () => {
   const first = await limiter.consumeValidation();
   const second = await limiter.consumeValidation();
+  const third = await limiter.consumeValidation();
   assert.equal(first.allowed, true);
-  assert.equal(second.allowed, false);
-  assert.equal(second.reason, "quota_exceeded");
+  assert.equal(second.allowed, true);
+  assert.equal(third.allowed, false);
+  assert.equal(third.reason, "quota_exceeded");
   const rows = await storage.exec("SELECT bucket, COUNT(*) AS count FROM rate_events GROUP BY bucket ORDER BY bucket");
   const counts = Object.fromEntries(rows.map((row) => [row.bucket, Number(row.count)]));
-  assert.equal(counts.auth_credential_attempts, 1);
-  assert.equal(counts.credential, 1);
+  assert.equal(counts.auth_credential_attempts, 2);
+  assert.equal(counts.credential, undefined);
 });
 
 test("upstream 429 cooldown blocks subsequent requests inside the same SQLite object", async () => {
   await limiter.recordUpstream429({ retryAfterHeader: "120" });
-  const decision = await limiter.consumeIpAttempt();
+  const decision = await limiter.checkUpstreamCooldown();
   assert.equal(decision.allowed, false);
   assert.equal(decision.reason, "upstream_cooldown");
   assert.ok(decision.retryAfterSeconds >= 1);
