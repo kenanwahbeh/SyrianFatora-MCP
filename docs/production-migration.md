@@ -209,3 +209,8 @@ The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documen
 - The test suites mock the Durable Object namespace. They do not prove SQLite transaction behavior or true concurrent request serialization.
 - Both production configs point to the same DO class in source. The repository cannot prove that production bindings are deployed or that `RATE_LIMIT_HMAC_SECRET` has identical bytes in both Workers.
 - Preview deliberately omits `RATE_LIMITER`; rate-limited operations fail closed there.
+
+
+## Quota policy correction — 2026-11-19
+
+This section supersedes earlier PR #14 notes in this file that described local per-credential request budgets, per-grant request windows, a configured fallback cooldown, or a requirement to aggregate multiple API keys into a local workspace quota. Those descriptions document the previous implementation and are no longer current. The current source leaves workspace quota enforcement to SyrianFatora, retains authorization-attempt abuse protection, and stores a cooldown only from a valid provider Retry-After response. No local API usage quota is active.
