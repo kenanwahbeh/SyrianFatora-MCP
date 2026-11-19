@@ -97,22 +97,17 @@ SyrianFatora is the sole authority for workspace request quotas. The integration
 
 PR #14 adds Auth and MCP rate-limit client tests. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: each completed dependency installation, `npm run build:check`, and `npm test`. These tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or concurrent consumption. Direct Durable Object tests and read-only production configuration checks remain release gates. Never run write-operation tests against a real customer workspace.
 
-## Rate-limiting implementation
+## Remaining guard implementation
 
-- [x] Add a shared SQLite Durable Object coordinator hosted by the authorization Worker.
-- [x] Gate authorization approval before SyrianFatora key validation using IP and credential-attempt sliding windows.
-- [x] Gate every MCP upstream fetch using the same credential-wide budget plus a per-grant sliding window.
-- [x] Use keyed HMAC-SHA-256 identities; never persist raw credentials, IP addresses or grant subjects in limiter storage.
-- [x] Fail closed when configuration or the coordinator is unavailable; return controlled 429/503 responses.
-- [x] Record upstream 429 cooldowns and honor Retry-After without automatic retries.
-- [ ] Confirm this workspace's actual provider quota and configure finite runtime thresholds.
-- [ ] Set the identical HMAC secret on both Workers.
-- [x] Run CI build checks and package tests for the initial source commit.
-- [x] Add focused Auth and MCP rate-limit client tests; latest CI results are recorded in the PR and audit log.
-- [ ] Add direct Durable Object SQLite atomicity/concurrency tests and complete safe preview verification.
-- [ ] Complete operational verification before production rollout, including deployed bindings, identical HMAC secret provisioning, and generated migration metadata.
+- [x] Keep a SQLite-backed Durable Object for authorization IP and credential-attempt abuse protection.
+- [x] Keep the same HMAC secret for privacy-preserving credential identity across the Auth and MCP Workers.
+- [x] Use the Durable Object for provider-directed 429 cooldown state only; do not count ordinary MCP requests.
+- [x] Remove per-credential and per-grant MCP usage counters and their configuration.
+- [x] Remove the local fallback cooldown; only honor a valid provider Retry-After value.
+- [ ] Re-run both package build checks and test suites after this change.
+- [ ] Verify generated Durable Object migration metadata and production bindings/secrets before rollout.
 
-The implementation is committed to source; the unchecked items remain production blockers.
+The remaining local controls are not workspace quota enforcement. No local quota thresholds or cross-key workspace identity are required.
 
 ## Provider quota confirmation
 
