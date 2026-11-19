@@ -95,5 +95,5 @@ test("upstream 429 cooldown blocks subsequent requests inside the same SQLite ob
   const decision = await limiter.checkUpstreamCooldown();
   assert.equal(decision.allowed, false);
   assert.equal(decision.reason, "upstream_cooldown");
-  assert.ok(decision.retryAfterSeconds >= 1);
+  assert.ok(decision.retryAfterSeconds >= 119 && decision.retryAfterSeconds <= 120);
 });
