@@ -23,7 +23,7 @@ const resourceServer = new OAuthResourceServer({
         requireWriteScope: () => ctx.auth.scope.includes("mcp:write")
           ? null
           : insufficientScope(ctx.auth, ["mcp:read", "mcp:write"]),
-        rateLimit: () => consumeMcpRequest(workerEnv, ctx.props),
+        checkUpstreamCooldown: () => consumeMcpRequest(workerEnv, ctx.props),
         onUpstreamRateLimited: (retryAfter) =>
           recordUpstreamRateLimit(workerEnv, ctx.props, retryAfter),
       });
