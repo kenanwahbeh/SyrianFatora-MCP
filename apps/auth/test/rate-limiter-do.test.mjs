@@ -75,6 +75,21 @@ test("authorization credential protection counts attempts only, not MCP workspac
   assert.equal(counts.credential, undefined);
 });
 
+test("missing Retry-After does not create an invented local cooldown", async () => {
+  const result = await limiter.recordUpstream429({ retryAfterHeader: null });
+  assert.equal(result.recorded, false);
+  const decision = await limiter.checkUpstreamCooldown();
+  assert.equal(decision.allowed, true);
+});
+
+test("MCP cooldown checks do not charge local request events", async () => {
+  const before = await storage.exec("SELECT COUNT(*) AS count FROM rate_events");
+  const decisions = await Promise.all(Array.from({ length: 25 }, () => limiter.checkUpstreamCooldown()));
+  const after = await storage.exec("SELECT COUNT(*) AS count FROM rate_events");
+  assert.ok(decisions.every((decision) => decision.allowed));
+  assert.equal(Number(after[0].count), Number(before[0].count));
+});
+
 test("upstream 429 cooldown blocks subsequent requests inside the same SQLite object", async () => {
   await limiter.recordUpstream429({ retryAfterHeader: "120" });
   const decision = await limiter.checkUpstreamCooldown();
