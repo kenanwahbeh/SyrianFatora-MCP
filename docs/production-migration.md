@@ -67,19 +67,16 @@ The reported conflict was:
 
 No successful production overwrite was reported from this failed build. Do not treat the failed deployment as an applied release. Do not use `--force` as a blind workaround.
 
-## Mandatory rate-limit blocker
+## Provider quota and abuse-protection behavior
 
-The source-level rate-limit gates are now implemented on PR #14:
-1. Auth approval checks IP and credential-attempt buckets, then the shared credential budget, before calling `validateSyrianFatoraKey`.
-2. MCP applies a shared credential budget and per-grant window immediately before its only upstream fetch.
-3. Auth and MCP production configs bind to the same `syrianfatora-auth` / `CredentialRateLimiter` SQLite Durable Object class.
-4. The coordinator checks all requested buckets and inserts accepted events inside `transactionSync()`.
-5. Missing bindings/configuration, coordinator failures, and inability to record an upstream 429 cooldown fail closed.
-6. Upstream 429 and Retry-After are recorded as a per-credential cooldown; no automatic retry is performed.
+The source change removes the competing local usage quotas:
+1. Auth approval retains IP-attempt and repeated credential-validation-attempt protections before upstream key validation.
+2. MCP no longer increments a per-credential or per-grant request counter and has no local daily/monthly quota.
+3. The SQLite Durable Object remains for authorization abuse protection and provider-directed cooldown state only.
+4. After SyrianFatora returns HTTP 429, a cooldown is stored only if the response contains a valid Retry-After value. The provider's duration is used as-is; no fallback is invented.
+5. No automatic retry is performed. The provider's 429 and quota headers remain authoritative.
 
-Production deployment remains blocked until finite runtime limits are selected from verified workspace quota information, identical HMAC secrets are provisioned in both Workers, generated migration metadata and deployed bindings are verified, and direct Durable Object atomicity/concurrency tests pass. The local key identity is the API-key fingerprint: different API keys for one upstream workspace are not aggregated. Preview omits the limiter binding and therefore fails closed.
-
-Cloudflare Workers Rate Limiting bindings are suitable for approximate per-location edge/burst gates only. They are not a strict global quota mechanism. The Durable Object coordinator is required for the shared per-credential upstream budget.
+No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Production deployment still requires the usual independent checks of Worker bindings, secrets, generated Durable Object metadata, endpoint identity, and rollback readiness.
 
 ## Configuration still required
 
