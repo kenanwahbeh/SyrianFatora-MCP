@@ -65,7 +65,7 @@ test("read-only customer listing forwards the grant key only upstream", async ()
     name: "customers_list",
     arguments: { query: { page: 2, per_page: 10, active: true } },
   }), props, {
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async (url, options) => {
       observed = { url, options };
       return Response.json({ data: [{ id: "customer-1" }] }, {
@@ -241,18 +241,19 @@ test("fails closed when no rate limiter is provided", async () => {
   assert.equal(called, false);
 });
 
-test("blocks upstream calls when the shared quota is exhausted", async () => {
+test("blocks upstream calls only while SyrianFatora Retry-After cooldown is active", async () => {
   let called = false;
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "customers_list",
     arguments: {},
   }), props, {
-    rateLimit: async () => ({ allowed: false, retryAfterSeconds: 23 }),
+    checkUpstreamCooldown: async () => ({ allowed: false, retryAfterSeconds: 23, reason: "upstream_cooldown" }),
     fetchImpl: async () => { called = true; return Response.json({}); },
   });
 
   assert.equal(response.status, 429);
   assert.equal(response.headers.get("Retry-After"), "23");
+  assert.match((await response.clone().json()).error.message, /SyrianFatora has temporarily asked/);
   assert.equal(called, false);
 });
 
