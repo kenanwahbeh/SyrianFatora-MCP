@@ -10,7 +10,7 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 
 ## Production status — 2026-11-19
 
-<badge color="success">Production migration deployed</badge>
+**Status: Production migration deployed.**
 
 - Auth Worker: https://syrianfatora-auth.kinan-api.workers.dev.
 - Existing MCP Worker migrated in place: https://syrianfatora-mcp.kinan-api.workers.dev/mcp.
