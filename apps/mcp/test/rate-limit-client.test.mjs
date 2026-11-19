@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { consumeMcpRequest, recordUpstreamRateLimit } from "../src/rate-limit-client.mjs";
+import { checkUpstreamCooldown, recordProviderCooldown } from "../src/rate-limit-client.mjs";
 
 const secret = "test-only-rate-limit-secret-with-at-least-32-bytes";
 const props = {
@@ -24,7 +24,7 @@ function harness() {
 
 test("MCP requests check only provider-issued cooldown and do not charge local quota buckets", async () => {
   const h = harness();
-  const result = await consumeMcpRequest(h.env, props);
+  const result = await checkUpstreamCooldown(h.env, props);
   assert.equal(result.allowed, true);
   assert.match(h.names[0], /^credential:[a-f0-9]{64}$/);
   assert.equal(h.calls[0][0], "checkUpstreamCooldown");
@@ -33,7 +33,7 @@ test("MCP requests check only provider-issued cooldown and do not charge local q
 
 test("upstream 429 cooldown is recorded on the same credential object", async () => {
   const h = harness();
-  await recordUpstreamRateLimit(h.env, props, "23");
+  await recordProviderCooldown(h.env, props, "23");
   assert.equal(h.names.length, 1);
   assert.equal(h.calls[0][0], "recordUpstream429");
   assert.equal(h.calls[0][2].retryAfterHeader, "23");
@@ -41,12 +41,12 @@ test("upstream 429 cooldown is recorded on the same credential object", async ()
 
 test("missing secret or Durable Object binding fails closed", async () => {
   const h = harness();
-  await assert.rejects(consumeMcpRequest({ RATE_LIMITER: h.env.RATE_LIMITER }, props));
-  await assert.rejects(consumeMcpRequest({ RATE_LIMIT_HMAC_SECRET: secret }, props));
+  await assert.rejects(checkUpstreamCooldown({ RATE_LIMITER: h.env.RATE_LIMITER }, props));
+  await assert.rejects(checkUpstreamCooldown({ RATE_LIMIT_HMAC_SECRET: secret }, props));
 });
 
 test("invalid upstream credential fails closed", async () => {
   const h = harness();
-  await assert.rejects(consumeMcpRequest(h.env, { ...props, upstreamApiKey: "" }));
+  await assert.rejects(checkUpstreamCooldown(h.env, { ...props, upstreamApiKey: "" }));
   assert.equal(h.calls.length, 0);
 });
