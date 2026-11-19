@@ -209,4 +209,3 @@ The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documen
 - The test suites mock the Durable Object namespace. They do not prove SQLite transaction behavior or true concurrent request serialization.
 - Both production configs point to the same DO class in source. The repository cannot prove that production bindings are deployed or that `RATE_LIMIT_HMAC_SECRET` has identical bytes in both Workers.
 - Preview deliberately omits `RATE_LIMITER`; rate-limited operations fail closed there.
-- Distinct API keys belonging to the same SyrianFatora workspace still map to distinct local quota identities. Do not claim workspace-wide aggregation across different keys.
