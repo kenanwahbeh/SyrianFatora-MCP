@@ -40,11 +40,13 @@ The current checked-in config is still preview-only and contains `.invalid` URLs
 
 Cloudflare's requiredScopes metadata is advertised to clients; this Worker explicitly enforces scopes in its handler as well.
 
-## Mandatory upstream rate limiting
+## Provider-owned quota
 
-Every upstream fetch from the MCP handler must pass a limiter before the request is sent. The strict quota identity is a keyed HMAC fingerprint of the upstream API credential, not the random OAuth grant subject, so multiple grants cannot multiply one workspace's allowance. Use a Durable Object to coordinate the strict per-credential budget across requests and Cloudflare locations, with a separate per-grant burst gate. Share the same credential budget with authorization-key validation. Fail closed when the limiter is unavailable and honor upstream 429 / Retry-After with a per-credential cooldown.
+SyrianFatora is the sole authority for workspace API quota. This Worker must not apply local per-credential request quotas, per-OAuth-grant quotas, or local daily/monthly caps. Normal MCP requests are not counted by a local usage limiter.
 
-The current source does not yet implement this control. Production deployment is blocked until implementation and verification.
+Before an upstream call, the Worker checks only whether SyrianFatora previously returned HTTP 429 with a valid `Retry-After` value for this credential. If so, it waits for the provider-specified period and returns a controlled 429 with `Retry-After`. No local fallback duration is invented. If the provider did not supply a valid `Retry-After`, no local cooldown is created. The Worker never automatically retries upstream requests.
+
+The credential HMAC fingerprint is used only to scope authorization anti-abuse and provider-directed cooldown state. It is not a workspace identity or quota counter.
 
 ## Build and testing
 
