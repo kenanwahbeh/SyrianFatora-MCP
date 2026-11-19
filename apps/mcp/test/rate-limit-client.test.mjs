@@ -6,7 +6,6 @@ const secret = "test-only-rate-limit-secret-with-at-least-32-bytes";
 const props = {
   provider: "syrianfatora",
   upstreamApiKey: "sk_live_test_credential_1234567890",
-  grantSubject: "grant-test-001",
 };
 function harness() {
   const names = [];
@@ -15,7 +14,7 @@ function harness() {
     idFromName(name) { names.push(name); return name; },
     get(id) {
       return {
-        async consumeProxy(input) { calls.push(["consumeProxy", id, input]); return { allowed: true }; },
+        async checkUpstreamCooldown() { calls.push(["checkUpstreamCooldown", id]); return { allowed: true }; },
         async recordUpstream429(input) { calls.push(["recordUpstream429", id, input]); return { recorded: true }; },
       };
     },
@@ -23,13 +22,13 @@ function harness() {
   return { env: { RATE_LIMIT_HMAC_SECRET: secret, RATE_LIMITER: namespace }, names, calls };
 }
 
-test("MCP requests use a credential-scoped Durable Object and a grant fingerprint", async () => {
+test("MCP requests check only provider-issued cooldown and do not charge local quota buckets", async () => {
   const h = harness();
   const result = await consumeMcpRequest(h.env, props);
   assert.equal(result.allowed, true);
   assert.match(h.names[0], /^credential:[a-f0-9]{64}$/);
-  assert.equal(h.calls[0][0], "consumeProxy");
-  assert.match(h.calls[0][2].grantFingerprint, /^[a-f0-9]{64}$/);
+  assert.equal(h.calls[0][0], "checkUpstreamCooldown");
+  assert.equal(h.calls[0].length, 2);
 });
 
 test("upstream 429 cooldown is recorded on the same credential object", async () => {
@@ -46,8 +45,8 @@ test("missing secret or Durable Object binding fails closed", async () => {
   await assert.rejects(consumeMcpRequest({ RATE_LIMIT_HMAC_SECRET: secret }, props));
 });
 
-test("invalid grant identity fails closed", async () => {
+test("invalid upstream credential fails closed", async () => {
   const h = harness();
-  await assert.rejects(consumeMcpRequest(h.env, { ...props, grantSubject: "" }));
+  await assert.rejects(consumeMcpRequest(h.env, { ...props, upstreamApiKey: "" }));
   assert.equal(h.calls.length, 0);
 });
