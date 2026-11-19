@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - ".github/workflows/production-smoke.yml"
+      - "apps/auth/cloudflare.config.ts"
+      - "apps/mcp/cloudflare.config.ts"
   workflow_dispatch:
 
 permissions:
