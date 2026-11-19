@@ -83,7 +83,7 @@ SyrianFatora is the sole authority for workspace request quotas. The integration
 
 ## Production safety and stop conditions
 
-- Production rollout is blocked until rate limiting is implemented at both `POST /authorize` before credential validation and MCP before every upstream proxy call. Documentation alone is not enforcement.
+- Production rollout must verify the remaining authorization-attempt abuse guard and provider-directed 429 cooldown bindings. Normal MCP traffic must not be charged against a local request quota; SyrianFatora is the sole workspace quota authority.
 
 - Never deploy `.invalid` placeholders.
 - Never guess public URLs, Worker subdomains, or KV namespace IDs.
