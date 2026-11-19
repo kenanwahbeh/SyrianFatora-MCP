@@ -81,9 +81,9 @@ Candidate MCP URL:
 
 **Historical note:** this was a candidate URL before deployment. The 2026-11-19 GitHub Actions smoke workflow has since verified the production HTTPS endpoint and its health response.
 
-## Exact rollback source verification
+## Pre-migration rollback source verification — 2026-11-18
 
-The currently deployed Worker script was retrieved read-only from Cloudflare. Its extracted JavaScript content matched byte-for-byte with the repository archive:
+Before the in-place cutover, the live legacy MCP Worker script was retrieved read-only from Cloudflare. Its extracted JavaScript content matched byte-for-byte with the repository archive:
 
 - Repository archive: `src/worker-v1.1.0.mjs`
 - Archive blob SHA: `a93e1c254efb2a840c951f1a7326e28432e8f561`
@@ -91,7 +91,7 @@ The currently deployed Worker script was retrieved read-only from Cloudflare. It
 - Archived script length: 9,960 characters
 - Exact content comparison: **MATCH**
 
-This verifies the source-code archive against the live script. It does not by itself preserve all Worker metadata or deployment configuration. Before deployment, also capture the current settings, bindings, version details, and deployment metadata; current settings are recorded above.
+This verified the pre-migration source archive against the legacy live script. It did not by itself preserve all Worker metadata or deployment configuration; the settings, bindings, version details, and deployment metadata were also captured before the production overwrite.
 
 ## Previous failed deployment — 2026-11-18
 
