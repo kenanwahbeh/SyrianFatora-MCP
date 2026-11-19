@@ -10,7 +10,7 @@ export default defineConfig(({ isPreview }) => ({
 		compatibilityFlags: ["nodejs_compat"],
 		entrypoint: "src/index.mjs",
 		workersDev: true,
-		previewUrls: false,
+		previewUrls: isPreview,
 		observability: {
 			enabled: true,
 			redactQueryString: true,
