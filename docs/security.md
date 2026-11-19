@@ -28,30 +28,25 @@
 - Do not create a separate plaintext KV record for the API key.
 - Implement a disconnect/revoke action that invalidates OAuth grants and deletes or invalidates the associated upstream credential. This UX is still outstanding.
 
-## Rate limiting and SyrianFatora quota protection
+## Authorization abuse protection and provider quota
 
-Rate limiting is a **mandatory production release gate**, not an optional hardening item. Every approval POST that can reach `validateSyrianFatoraKey` consumes upstream quota, and every MCP tool call that proxies to SyrianFatora consumes upstream API capacity.
+SyrianFatora alone owns workspace API quota enforcement. Do not impose a local per-credential request budget, per-OAuth-grant request budget, local daily cap, or local monthly cap. Normal MCP requests must not consume local counters or be rejected because of locally calculated usage.
 
-### Required enforcement points
+The authorization endpoint retains two narrow anti-abuse controls before the read-only API-key validation request:
+1. IP-based protection against repeated authorization submissions.
+2. Credential-fingerprint protection against repeated key-validation attempts.
 
-1. **Authorization approval:** apply a rate-limit decision before calling `validateSyrianFatoraKey`. Denied attempts must not call SyrianFatora. Protect both the client/IP attempt rate and repeated attempts using the submitted credential fingerprint; never use or store the raw API key as a limiter key.
-2. **MCP upstream proxy:** apply a rate-limit decision before every upstream fetch. Key the strict quota budget by a keyed fingerprint of the upstream API credential so multiple OAuth grants for the same workspace cannot multiply its allowance. Add a per-grant budget to contain a single client's burst.
-3. **Fail closed:** if the strict limiter is unavailable or cannot determine whether the request is within budget, do not call SyrianFatora. Return a controlled 429 or 503 with `Retry-After` where appropriate.
-4. **Upstream feedback:** honor SyrianFatora 429 responses and `Retry-After`; do not automatically retry quota-exhausting requests. Add a per-credential cooldown/circuit breaker after upstream 429 responses.
-5. **No secret leakage:** derive credential fingerprints using a server-side keyed HMAC; never log the key or persist the raw key in limiter storage.
+These are protections for repeated authorization attempts only. They are not workspace quota controls and must not be applied to normal MCP tool calls.
 
-### Control design and accuracy
+When SyrianFatora returns HTTP 429, the MCP Worker may store a cooldown for that credential only when the provider supplies a valid Retry-After value. The cooldown must use that exact provider-directed wait; do not add a local fallback or invent a duration. Do not automatically retry. If Retry-After is missing or invalid, do not create a local cooldown. Return the upstream 429 information to the MCP client.
 
-- Cloudflare Workers Rate Limiting bindings may provide a fast edge gate for IP-level authorization attempts and per-grant burst protection. Their counters are approximate and local to each Cloudflare location; they are **not** a strict global or per-workspace quota control.
-- A Durable Object keyed by the keyed credential fingerprint is the required strict shared coordinator for each upstream SyrianFatora credential. It must atomically check and charge the credential budget before allowing a proxy call, coordinate concurrent requests, and persist the rolling/window counter and cooldown state.
-- Set finite thresholds from the actual SyrianFatora API quota and expected legitimate client usage. Do not invent provider limits. If the upstream quota is unknown, use conservative configurable caps and obtain an explicit reviewed budget before production enablement; do not ship with an unlimited or disabled limiter.
-- The same credential-level budget must cover both `validateSyrianFatoraKey` and all MCP upstream calls. Keep authorization-attempt/IP limits as an additional abuse control, not a substitute for credential-level quota accounting. The current identity is a keyed API-key fingerprint: it unifies grants that use the same key, but does not aggregate different keys belonging to one workspace.
+The credential HMAC fingerprint remains only as a privacy-preserving key for authorization-attempt protection and provider-directed cooldown state. It is not a substitute for a workspace identifier and is not used to meter API usage. The random OAuth grant subject is not a workspace identity. Never store raw API keys, IP addresses, or grant subjects in limiter storage.
 
-### Current implementation status
+The SQLite Durable Object is retained only for authorization abuse protection and provider-directed 429 cooldown state. MCP requests do not increment `rate_events`; the MCP guard only checks whether a provider-directed cooldown is still active. No local request quota is created.
 
-The source now enforces these gates: the authorization approval POST passes IP and credential-attempt checks plus the shared credential budget before validateSyrianFatoraKey; every MCP upstream fetch passes the same credential budget and a per-grant burst window. The coordinator is a SQLite-backed Durable Object exported by the authorization Worker and bound into the MCP Worker. Counters use sliding windows and keyed HMAC identities; raw API keys, IP addresses and grant subjects are not stored by the limiter.
+## Provider quota visibility
 
-This is source implementation, not production verification. Finite thresholds are mandatory runtime configuration and have not been invented; missing configuration or an unavailable coordinator fails closed. Both production configs point at the same Durable Object class. Preview omits the limiter binding and therefore fails closed for upstream calls. Production rollout remains blocked until the actual SyrianFatora quota is confirmed, identical HMAC secrets are installed on both Workers, the runtime configuration is set, generated migration metadata and deployed bindings are verified, and direct Durable Object atomicity/concurrency tests are completed.
+SyrianFatora response headers `X-RateLimit-Limit` and `X-RateLimit-Remaining`, together with its HTTP 429 and `Retry-After` response, are the source of truth for provider quota state. Preserve and expose provider quota information to the MCP client where available. Do not infer a workspace's quota from the number of API keys or OAuth grants.
 
 ## Production migration safeguards
 
