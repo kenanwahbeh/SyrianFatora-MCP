@@ -1,15 +1,52 @@
 # Production migration runbook and execution log
 
-**Last updated:** 2026-11-18  
-**Status:** Preparation in progress. One production KV namespace has been created; no Worker code, binding, route, DNS, or deployment has been changed.
+**Last updated:** 2026-11-19  
+**Status:** Production OAuth migration deployed. Auth and MCP production smoke checks passed. Real-key OAuth token issuance/refresh remains unverified.
+
+## Current production state — 2026-11-19
+
+| Item | Verified production value |
+| --- | --- |
+| Cloudflare account subdomain | `kinan-api` |
+| Auth Worker | `syrianfatora-auth` |
+| Auth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
+| Auth version / deployment | v3 `749ba335-b8ab-491c-8e7a-c4d703056ad6` / `6f6c17ce-db28-4b4b-bf3f-a2e5195d1a62` |
+| Existing MCP Worker | `syrianfatora-mcp` (migrated in place) |
+| MCP resource URL | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
+| MCP version / deployment | v6 `392a040a-eff8-421d-952b-0075dc74e703` / `6fe36215-6e5d-4368-8744-ea90473b78c3` |
+| MCP rollback version | v4 `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (captured before code migration; secret already present) |
+| OAuth KV | `syrianfatora-oauth-production`, `d19d9bd755c349f688cd55e299b8168f` |
+| SQLite Durable Object | `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
+| Shared HMAC secret | `RATE_LIMIT_HMAC_SECRET` exists on both Workers; same random 48-byte value, never logged |
+| Auth attempt limits | 7 attempts/IP/60s; 2 attempts/credential/60s |
+| workers.dev | Enabled for both production Workers |
+| Public version-preview URLs | Disabled for both production Workers |
+| MCP tools | 51 preserved; production health reports `toolCount: 51` |
+
+The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` and `RATE_LIMITER` bound to the Auth Worker's SQLite Durable Object namespace. The Auth Worker has the production KV binding and the same HMAC secret. No custom domain or DNS record was changed.
+
+### Verification
+
+- Auth `/health`: HTTP 200.
+- Auth `/.well-known/oauth-authorization-server`: HTTP 200; issuer and endpoints match production URLs.
+- MCP `/health`: HTTP 200; reports 51 tools.
+- MCP protected-resource metadata: HTTP 200 at `/.well-known/oauth-protected-resource/mcp`; advertises the Auth issuer.
+- MCP request with a deliberately invalid bearer token: HTTP 401.
+- GitHub Actions production smoke run: `44456841885`, completed successfully on 2026-11-19.
+- Auth unit tests: 40/40 pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
+- MCP unit tests: 21/21 pass.
+- `npm audit --audit-level=high`: zero vulnerabilities for both packages using npm 10.9.2, matching Cloudflare Build.
+- **Still outstanding:** full authorization-code/token/refresh flow using a real SyrianFatora workspace key. No real key was shared or used in this migration. No write operations were tested against a production workspace.
+
+
 
 ## Agreed outcome
 
 Migrate the existing Cloudflare MCP resource Worker in place. Keep the exact production service name `syrianfatora-mcp`, preserve its public MCP endpoint identity and its 51 tools. Add a separate OAuth authorization Worker named `syrianfatora-auth`, connected by Service Binding `AUTH_SERVER` → `SyrianFatoraAuth`. Do not create a replacement MCP Worker.
 
-PR #14 adds focused Auth and MCP rate-limit client tests, and both package build/test workflows pass for the tested code commit. Direct Durable Object SQLite atomicity/concurrency tests remain outstanding. Only read-only production probes are permitted.
+CI now runs Auth and MCP unit tests, a high-severity npm audit gate, and Cloudflare build checks. The Auth suite includes SQLite Durable Object concurrency tests. Production verification is restricted to read-only smoke tests; no write operation was sent to a real workspace.
 
-## Current production baseline — read-only inspection
+## Pre-migration production baseline — read-only inspection (2026-11-18)
 
 Cloudflare account: the account currently connected for this project.
 
@@ -40,7 +77,7 @@ Candidate MCP URL:
 
 `https://syrianfatora-mcp.kinan-api.workers.dev/mcp`
 
-**Important:** the candidate URL is derived from Cloudflare's account subdomain and Worker name, but an HTTP endpoint probe has not yet been completed. Do not mark it verified until a direct HTTPS request confirms it.
+**Historical note:** this was a candidate URL before deployment. The 2026-11-19 GitHub Actions smoke workflow has since verified the production HTTPS endpoint and its health response.
 
 ## Exact rollback source verification
 
@@ -65,7 +102,7 @@ The reported conflict was:
 - The live Worker was last updated through the script API.
 - Cloudflare warned that a CLI upload would override script-API edits and aborted, suggesting `cf deploy --force`.
 
-No successful production overwrite was reported from this failed build. Do not treat the failed deployment as an applied release. Do not use `--force` as a blind workaround.
+No successful production overwrite was reported from this failed build. This was resolved on 2026-11-19 only after the live MCP script/version and rollback reference were captured, the production config was reviewed, and the intended in-place overwrite was confirmed. The Cloudflare Build deploy command now uses `--force` deliberately for that reviewed migration; it is not a general-purpose workaround.
 
 ## Provider quota and abuse-protection behavior
 
@@ -78,41 +115,42 @@ The source change removes the competing local usage quotas:
 
 No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Production deployment still requires the usual independent checks of Worker bindings, secrets, generated Durable Object metadata, endpoint identity, and rollback readiness.
 
-## Configuration still required
+## Production configuration — completed
 
-1. Verify the candidate MCP HTTPS endpoint directly.
-2. Use the verified account workers.dev subdomain `kinan-api` for the auth origin unless an already-owned custom domain is deliberately selected. Candidate auth origin: `https://syrianfatora-auth.kinan-api.workers.dev`; direct HTTPS probe is still required after deployment.
-3. Production KV namespace has now been created for the auth Worker's `OAUTH_KV` binding. Namespace: `syrianfatora-oauth-production`; ID: `d19d9bd755c349f688cd55e299b8168f`.
-4. Update `apps/auth/cloudflare.config.ts`:
-   - Worker name `syrianfatora-auth`
-   - `ISSUER` exact public HTTPS auth origin
-   - `MCP_SERVER_URL` exact MCP URL including `/mcp`
-   - `OAUTH_KV` production namespace ID
-5. Update `apps/mcp/cloudflare.config.ts`:
-   - Worker name exactly `syrianfatora-mcp`
-   - `MCP_SERVER_URL` exact public HTTPS MCP URL including `/mcp`
-   - `AUTH_SERVER_URL` exact issuer origin
-   - `AUTH_SERVER` Service Binding to `syrianfatora-auth`, entrypoint `SyrianFatoraAuth`
-6. The current Cloudflare Build trigger is recorded below. Confirm its root directory, build command, deploy command, and target Worker name all agree with the config. Do not let a docs-only branch trigger a production deployment.
-7. Deploy the auth Worker, record its deployment/version IDs, then migrate the existing MCP Worker in place.
-8. Run read-only health, OAuth metadata/discovery, invalid-token, initialize, and tools/list probes. Do not perform create/update/delete calls against a real workspace.
-9. Update this log with actual results and the final rollback identifiers.
+- Auth Worker name: `syrianfatora-auth`.
+- Auth `ISSUER`: `https://syrianfatora-auth.kinan-api.workers.dev`.
+- Auth and MCP `MCP_SERVER_URL`: `https://syrianfatora-mcp.kinan-api.workers.dev/mcp`.
+- MCP `AUTH_SERVER_URL`: `https://syrianfatora-auth.kinan-api.workers.dev`.
+- Auth `OAUTH_KV`: production namespace `d19d9bd755c349f688cd55e299b8168f`.
+- Auth exports SQLite Durable Object `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd`.
+- MCP `AUTH_SERVER`: Service Binding to `syrianfatora-auth`, entrypoint `SyrianFatoraAuth`.
+- MCP `RATE_LIMITER`: Durable Object binding to `CredentialRateLimiter` in `syrianfatora-auth`.
+- Both Workers have the same random 48-byte `RATE_LIMIT_HMAC_SECRET`; the value is not readable through Cloudflare's secret API and is not recorded here.
+- Auth abuse protection is enabled in production: 7/IP/60s and 2/credential/60s.
+- Both primary workers.dev routes are enabled; public version-preview URLs are disabled.
+- No custom domain, DNS, unrelated Worker, or admin site was changed.
 
-## Existing Cloudflare Build trigger
+## Cloudflare Build triggers
 
-Read-only inspection of the trigger attached to the existing MCP script tag:
+**Auth Worker**
+- Script tag: `306b76a577eb4cfeb9b8dfb1f0c12484`
+- Trigger ID: `76787337-ed7e-49da-897a-39f548a65b91`
+- Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
+- Root: `/apps/auth`
+- Build: `npm audit --audit-level=high && npm run build:check`
+- Deploy: `npx cf deploy --prebuilt --mode production --force`
+- Paths: `apps/auth/**`, `apps/auth/package.json`, `apps/auth/package-lock.json`
 
+**Existing MCP Worker**
 - Script tag: `80f433e8c9db45adba9d8df05ff403d8`
 - Trigger ID: `593221cf-b17a-4506-979a-ebb7f4307c69`
-- Repository: `kenanwahbeh/SyrianFatora-MCP`
-- Watched branch: `main`
-- Root directory: `/apps/mcp`
-- Build command: `npm run build:check`
-- Deploy command: `npx cf deploy --prebuilt --mode production`
-- Included paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
-- Excluded paths: none
+- Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
+- Root: `/apps/mcp`
+- Build: `npm audit --audit-level=high && npm run build:check`
+- Deploy: `npx cf deploy --prebuilt --mode production --force`
+- Paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
 
-The docs-only branch/PR does not match the trigger's included paths, so these documentation changes do not start the production MCP build. There is no separate auth Worker Build trigger recorded yet.
+Both triggers are path-scoped so documentation-only changes do not start production deployments. The Auth and MCP build triggers are independent; Auth was deployed first, then the existing MCP Worker was updated in place.
 
 ## Execution log
 
@@ -129,6 +167,14 @@ The docs-only branch/PR does not match the trigger's included paths, so these do
 | 2026-11-18 | Checked existing Worker domains | No MCP custom domain found |
 | 2026-11-18 | Reviewed previous Cloudflare Build failure | Deployment aborted on Worker-name/script-API conflict |
 | 2026-11-18 | Changed existing MCP Worker code, bindings, routes, DNS, or deployment | **No changes made** |
+
+| 2026-11-19T04:02Z | Created production Auth Worker and configured shared HMAC secret | `syrianfatora-auth`; workers.dev enabled; production KV and SQLite DO created; same 48-byte secret set on Auth and MCP |
+| 2026-11-19T04:06Z | Deployed Auth Worker | Version 3 `749ba335-b8ab-491c-8e7a-c4d703056ad6`; deployment `6f6c17ce-db28-4b4b-bf3f-a2e5195d1a62`; public preview URLs disabled |
+| 2026-11-19T04:11Z | Migrated existing MCP Worker in place | `syrianfatora-mcp` version 5 `0b68ea33-028d-4d7e-995e-9faa64d6eb2e`; Service Binding and Durable Object bindings verified |
+| 2026-11-19T04:16Z | Final MCP production deployment | Version 6 `392a040a-eff8-421d-952b-0075dc74e703`; deployment `6fe36215-6e5d-4368-8744-ea90473b78c3`; public preview URLs disabled |
+| 2026-11-19 | Production smoke tests | Auth/MCP health, OAuth discovery, protected-resource metadata, 51-tool health count, and invalid-token HTTP 401 all passed |
+| 2026-11-19 | Dependency audit and unit tests | npm 10.9.2 audit: zero vulnerabilities; Auth 40/40 tests; MCP 21/21 tests; SQLite concurrency test passed |
+| 2026-11-19 | Real-key OAuth end-to-end | Not run; requires a real SyrianFatora workspace key entered through the first-party authorization page. No key was shared in chat and no workspace writes were performed |
 
 ## Change record template
 
@@ -178,7 +224,7 @@ Typed cf/config now resolves Worker names and cross-Worker bindings by isPreview
 - Preview config uses syrianfatora-mcp-oauth-preview and syrianfatora-auth-preview.
 - The production MCP Durable Object and authorization Service Bindings both target syrianfatora-auth.
 - Preview omits RATE_LIMITER, so it cannot call the SyrianFatora upstream API.
-- The production OAuth KV config points to the already-created syrianfatora-oauth-production namespace. Preview KV ID and production public issuer URLs remain placeholders and must be configured/verified before any deployment.
+- The production OAuth KV config points to the already-created syrianfatora-oauth-production namespace. Historical pre-deployment state. Superseded by the 2026-11-19 production deployment record above; production URLs and KV/DO bindings are now configured and smoke-tested.
 
 No deployment was performed by this configuration change.
 
@@ -194,7 +240,7 @@ No deployment was performed by this configuration change.
   - AUTH_SERVER -> SyrianFatoraAuth exported by syrianfatora-auth
 - Confirmed the configured Worker name matches the existing production MCP Worker name, syrianfatora-mcp. Production binding names are now aligned with the agreed in-place migration.
 
-The dependency installation step also reported 5 high-severity npm audit findings. No automatic dependency remediation was applied; review the advisories and choose compatible fixes before production deployment.
+Historical 2026-11-18 finding: the dependency installation step reported 5 high-severity npm audit findings. Rechecked on 2026-11-19 with npm 10.9.2, matching Cloudflare Build, both package audits returned zero vulnerabilities. CI and Cloudflare Build triggers now enforce `npm audit --audit-level=high`.
 
 The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documentation-only changes do not start unnecessary builds. The main-branch production trigger remains unchanged.
 
@@ -206,8 +252,8 @@ The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documen
 - No Cloudflare production resources, DNS, Worker routes, or deployments were changed.
 - Added `apps/auth/test/rate-limit-client.test.mjs` and `apps/mcp/test/rate-limit-client.test.mjs`.
 - Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: MCP run #59 and Auth run #74. Both completed dependency installation, `npm run build:check`, and `npm test`.
-- The test suites mock the Durable Object namespace. They do not prove SQLite transaction behavior or true concurrent request serialization.
-- Both production configs point to the same DO class in source. The repository cannot prove that production bindings are deployed or that `RATE_LIMIT_HMAC_SECRET` has identical bytes in both Workers.
+- Historical pre-deployment note. Superseded on 2026-11-19: the Auth suite now exercises the SQLite-backed Durable Object and passes the concurrent authorization-attempt serialization test.
+- Historical pre-deployment note. Superseded on 2026-11-19: Cloudflare settings confirm the MCP Durable Object and Service Bindings point to the production Auth Worker, and the same 48-byte HMAC secret was set on both Workers in one operation.
 - Preview deliberately omits `RATE_LIMITER`; rate-limited operations fail closed there.
 
 
