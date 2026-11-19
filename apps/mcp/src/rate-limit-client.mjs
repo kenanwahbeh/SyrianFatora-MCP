@@ -22,7 +22,7 @@ async function credentialStub(env, props) {
   const credentialHash = await fingerprint(secret, "credential", apiKey);
   return stubFor(env, "credential:" + credentialHash);
 }
-export async function consumeMcpRequest(env, props) {
+export async function checkUpstreamCooldown(env, props) {
   try {
     const stub = await credentialStub(env, props);
     return await stub.checkUpstreamCooldown();
@@ -30,7 +30,7 @@ export async function consumeMcpRequest(env, props) {
     throw new Error("Rate limiter unavailable.");
   }
 }
-export async function recordUpstreamRateLimit(env, props, retryAfterHeader) {
+export async function recordProviderCooldown(env, props, retryAfterHeader) {
   try {
     const stub = await credentialStub(env, props);
     return await stub.recordUpstream429({ retryAfterHeader });
