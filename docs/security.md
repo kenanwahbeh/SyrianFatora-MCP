@@ -57,7 +57,7 @@ SyrianFatora response headers `X-RateLimit-Limit` and `X-RateLimit-Remaining`, t
 - Never use a real production workspace for write-operation smoke tests.
 - Limit smoke tests to health, OAuth metadata/discovery, MCP initialize, tools/list, invalid-token rejection, and safe read-only upstream requests.
 - Set request size limits, no-store response headers for sensitive endpoints, and conservative CORS/Content Security Policy.
-- Enforce the mandatory authorization and MCP upstream rate-limit gates described above before production traffic is enabled.
+- Verify the authorization-attempt abuse guard and provider-directed 429 cooldown bindings before production traffic is enabled. Do not add local request quotas to MCP traffic.
 - Redact sensitive headers, query strings, and authorization form bodies in observability.
 
 ## Testing exception
