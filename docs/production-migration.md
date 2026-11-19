@@ -67,19 +67,16 @@ The reported conflict was:
 
 No successful production overwrite was reported from this failed build. Do not treat the failed deployment as an applied release. Do not use `--force` as a blind workaround.
 
-## Mandatory rate-limit blocker
+## Provider quota and abuse-protection behavior
 
-The source-level rate-limit gates are now implemented on PR #14:
-1. Auth approval checks IP and credential-attempt buckets, then the shared credential budget, before calling `validateSyrianFatoraKey`.
-2. MCP applies a shared credential budget and per-grant window immediately before its only upstream fetch.
-3. Auth and MCP production configs bind to the same `syrianfatora-auth` / `CredentialRateLimiter` SQLite Durable Object class.
-4. The coordinator checks all requested buckets and inserts accepted events inside `transactionSync()`.
-5. Missing bindings/configuration, coordinator failures, and inability to record an upstream 429 cooldown fail closed.
-6. Upstream 429 and Retry-After are recorded as a per-credential cooldown; no automatic retry is performed.
+The source change removes the competing local usage quotas:
+1. Auth approval retains IP-attempt and repeated credential-validation-attempt protections before upstream key validation.
+2. MCP no longer increments a per-credential or per-grant request counter and has no local daily/monthly quota.
+3. The SQLite Durable Object remains for authorization abuse protection and provider-directed cooldown state only.
+4. After SyrianFatora returns HTTP 429, a cooldown is stored only if the response contains a valid Retry-After value. The provider's duration is used as-is; no fallback is invented.
+5. No automatic retry is performed. The provider's 429 and quota headers remain authoritative.
 
-Production deployment remains blocked until finite runtime limits are selected from verified workspace quota information, identical HMAC secrets are provisioned in both Workers, generated migration metadata and deployed bindings are verified, and direct Durable Object atomicity/concurrency tests pass. The local key identity is the API-key fingerprint: different API keys for one upstream workspace are not aggregated. Preview omits the limiter binding and therefore fails closed.
-
-Cloudflare Workers Rate Limiting bindings are suitable for approximate per-location edge/burst gates only. They are not a strict global quota mechanism. The Durable Object coordinator is required for the shared per-credential upstream budget.
+No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Production deployment still requires the usual independent checks of Worker bindings, secrets, generated Durable Object metadata, endpoint identity, and rollback readiness.
 
 ## Configuration still required
 
@@ -147,32 +144,28 @@ For every production action, append a row with:
 
 Never record credential values or secret material in this file.
 
-## Rate-limiter source implementation (2026-11-18)
+## Authorization abuse guard and provider cooldown implementation (2026-11-19)
 
-- Added CredentialRateLimiter, a SQLite-backed Durable Object exported by the authorization Worker.
-- Bound the authorization Worker to its coordinator and the MCP Worker to the same exported class.
-- Added authorization IP and credential-attempt gates before validateSyrianFatoraKey.
-- Added a shared credential sliding-window budget and per-grant sliding-window budget before every MCP upstream fetch.
-- Added HMAC-derived object and grant identities; raw credentials, IP addresses and grant subjects are not stored in limiter storage.
-- Added fail-closed handling and upstream 429 cooldown recording using Retry-After.
-- Added Preview configuration declarations; Preview does not receive a production limiter binding and must fail closed.
+- Retained IP and repeated credential-fingerprint attempt protection before upstream key validation.
+- Removed the local per-credential MCP request budget and per-OAuth-grant sliding-window budget.
+- MCP requests no longer charge local request counters.
+- Kept a credential-scoped cooldown only after SyrianFatora returns HTTP 429 with a valid Retry-After header.
+- Removed the configured fallback cooldown; missing or invalid Retry-After does not create a local wait period.
+- Kept provider quota headers visible in MCP tool responses and disabled automatic retries.
 
-Not yet verified: build checks, Worker runtime behavior, cross-Worker Durable Object binding, live quota values, HMAC secret parity, and production deployment. No production Worker, route, DNS record or customer workspace was changed. Thresholds remain unset until SyrianFatora quota information is confirmed.
+The HMAC fingerprint is not a workspace identifier and is not used to meter API usage. No local daily/monthly/per-key/per-grant quota is enforced.
+
+No production Worker, route, DNS record, secret, binding, or customer workspace was changed by this source update. Build/test and deployment checks remain to be completed.
 
 ### Preview configuration correction (2026-11-18)
 
 The first CI build rejected Wrangler's top-level previews property because this repository uses the typed cf/config API. Both Worker configs now use defineConfig(({ isPreview }) => ...) and omit the RATE_LIMITER binding for Preview builds. Preview requests therefore fail closed before any SyrianFatora upstream call. The Preview command for this toolchain is cf previews deploy; do not use npx wrangler preview against these cf/config projects.
 
-## SyrianFatora quota findings (2026-11-18)
+## SyrianFatora quota handling
 
-Official developer documentation states:
-- Daily quota: 1,000 requests per workspace by default; can be raised on request. The documentation also says all requests, including 429 responses, are recorded in usage/audit logs; it does not establish that every 429 consumes the daily allowance.
-- Paid plans: additional monthly quota measured by billing cycle; public docs do not state one universal monthly limit.
-- Response headers: X-RateLimit-Limit and X-RateLimit-Remaining; 429 responses include Retry-After.
+SyrianFatora is the source of truth for workspace usage and quota. The MCP integration does not replicate published daily/monthly values as a local cap. It forwards normal requests and returns provider quota headers when present.
 
-Source: https://syrianfatora.com/developers
-
-The current local coordinator groups by API-key fingerprint, not workspace identity. It therefore shares quota across grants using the same key, but cannot yet unify multiple different keys belonging to the same workspace. Before production, confirm one key per workspace or obtain a stable workspace identifier from the provider. Set the local daily threshold from the actual workspace limit; do not assume the default if the workspace limit was raised.
+A local cooldown is recorded only from a valid provider Retry-After value after an upstream HTTP 429. No fallback cooldown is configured. Distinct API keys and OAuth grants do not create separate local request budgets because no local request budget exists.
 
 ## Branch build validation change (2026-11-18)
 
@@ -216,4 +209,8 @@ The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documen
 - The test suites mock the Durable Object namespace. They do not prove SQLite transaction behavior or true concurrent request serialization.
 - Both production configs point to the same DO class in source. The repository cannot prove that production bindings are deployed or that `RATE_LIMIT_HMAC_SECRET` has identical bytes in both Workers.
 - Preview deliberately omits `RATE_LIMITER`; rate-limited operations fail closed there.
-- Distinct API keys belonging to the same SyrianFatora workspace still map to distinct local quota identities. Do not claim workspace-wide aggregation across different keys.
+
+
+## Quota policy correction — 2026-11-19
+
+This section supersedes earlier PR #14 notes in this file that described local per-credential request budgets, per-grant request windows, a configured fallback cooldown, or a requirement to aggregate multiple API keys into a local workspace quota. Those descriptions document the previous implementation and are no longer current. The current source leaves workspace quota enforcement to SyrianFatora, retains authorization-attempt abuse protection, and stores a cooldown only from a valid provider Retry-After response. No local API usage quota is active.

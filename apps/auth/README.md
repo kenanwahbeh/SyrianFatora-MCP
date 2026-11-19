@@ -31,9 +31,11 @@ This is the separate OAuth 2.1 authorization server required by the existing `sy
 
 The Worker needs a production KV namespace and the compatibility flags `nodejs_compat` and `global_fetch_strictly_public`. Do not deploy with `.invalid` URLs or placeholder KV IDs. Verify the account's Worker subdomain or configured custom domain first.
 
-## Mandatory rate-limit requirement
+## Authorization abuse protection
 
-The approval POST must pass an enforced limiter before `validateSyrianFatoraKey` is called. Apply both an edge/IP attempt limit and a repeated credential-fingerprint attempt limit. The credential-level budget must be shared with MCP upstream calls and must not use the raw API key as a limiter key. A strict shared budget requires a Durable Object coordinator; a standard Workers Rate Limiting binding is approximate per Cloudflare location and is not sufficient for strict quota accounting. Fail closed if the limiter is unavailable. Do not deploy this Worker until the gate is implemented and verified.
+Before validating a submitted API key, the approval POST applies two narrow protections: an IP attempt window and a repeated credential-fingerprint attempt window. These protect the authorization form from abuse only. They do not meter normal MCP requests and are not a substitute for SyrianFatora workspace quota enforcement.
+
+Do not add per-credential API request quotas or per-OAuth-grant request quotas. SyrianFatora is authoritative for workspace usage and quota. The Durable Object remains for authorization-attempt protection and provider-directed 429 cooldown state only.
 
 ## Security and known gaps
 
@@ -46,35 +48,21 @@ The approval POST must pass an enforced limiter before `validateSyrianFatoraKey`
 - Preview smoke tests verify OAuth discovery, DCR, PKCE consent, protected-resource metadata, and MCP-to-Auth service binding. Full token issuance and refresh with a valid SyrianFatora API key remain unverified.
 - The user has deferred automated tests for the immediate production migration; this is not a passing test result.
 
-## Enforced rate-limit coordinator
+## Shared guard and secrets
 
-The authorization Worker exports the SQLite-backed CredentialRateLimiter Durable Object. It is the shared quota coordinator for authorization-key validation and MCP upstream calls.
+The authorization Worker exports the SQLite-backed `CredentialRateLimiter` Durable Object. It stores only authorization IP/credential-attempt events and provider-directed 429 cooldown state. It does not count normal MCP requests or enforce a local API quota.
 
-Required Worker variables on the authorization Worker:
-
+Required authorization-attempt variables:
 - RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS
 - RATE_LIMIT_AUTH_IP_WINDOW_SECONDS
 - RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS
 - RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS
-- RATE_LIMIT_CREDENTIAL_MAX_REQUESTS
-- RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS
-- RATE_LIMIT_GRANT_MAX_REQUESTS
-- RATE_LIMIT_GRANT_WINDOW_SECONDS
-- RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS
 
-Set finite positive integer values only after verifying the SyrianFatora quota and expected legitimate use. No default or guessed quota is embedded in the code. Missing or invalid values cause the limiter to fail closed with HTTP 503.
+Set `RATE_LIMIT_HMAC_SECRET` on both Workers to the same random value of at least 32 bytes. The HMAC is used for privacy-preserving credential identities; never commit the secret or store raw API keys/IP addresses in limiter records.
 
-Set the secret RATE_LIMIT_HMAC_SECRET on both Workers to the exact same random value of at least 32 bytes. It is used only to derive HMAC-SHA-256 identities; raw API keys, IP addresses and OAuth grant subjects are not stored as limiter identifiers. Never commit the secret.
+A cooldown is stored only when SyrianFatora returns a valid `Retry-After` header. Its duration is taken from that header. There is no local fallback cooldown. If the provider omits or supplies an invalid header, no local cooldown is created.
 
-Preview binds only to the dedicated `syrianfatora-auth-preview` Durable Object and Preview KV namespace; it does not use Production quota or customer data. Preview-only test thresholds are configured in `cloudflare.config.ts` (100 requests per 60 seconds and a 30-second upstream 429 cooldown). Do not copy these values to Production.
-
-## SyrianFatora provider quota reference
-
-The official developer documentation states a default daily quota of 1,000 successful requests per workspace, which can be increased on request. Paid plans add a monthly quota measured by the billing cycle; the public documentation does not publish one universal monthly number. Responses include X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses include Retry-After.
-
-Source: https://syrianfatora.com/developers
-
-Configure RATE_LIMIT_CREDENTIAL_MAX_REQUESTS to the confirmed workspace daily allowance and RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS to the chosen conservative local guard window. The current coordinator is keyed by API-key fingerprint. Because the provider describes its quota as workspace-wide, multiple API keys belonging to one workspace would currently receive separate local counters. Production use therefore requires confirming one API key per workspace or obtaining a stable workspace identifier from the provider and changing the limiter identity.
+Preview retains isolated authorization-attempt thresholds. It does not define API usage quotas or a fallback cooldown duration.
 
 ## Preview deployment
 

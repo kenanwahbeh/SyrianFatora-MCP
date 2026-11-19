@@ -86,9 +86,6 @@ before(async () => {
         RATE_LIMIT_AUTH_IP_WINDOW_SECONDS: "60",
         RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: "100",
         RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: "60",
-        RATE_LIMIT_CREDENTIAL_MAX_REQUESTS: "100",
-        RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS: "60",
-        RATE_LIMIT_GRANT_WINDOW_SECONDS: "60",
         ACCESS_TOKEN_TTL_SECONDS: "60",
         REFRESH_TOKEN_TTL_SECONDS: "60",
         // Client registrations must outlive the token-expiry wait below;

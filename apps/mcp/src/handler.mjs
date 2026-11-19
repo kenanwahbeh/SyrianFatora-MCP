@@ -158,7 +158,7 @@ function getToolParts(name) {
 export async function handleMcpRequest(request, props, {
   fetchImpl = fetch,
   requireWriteScope = () => true,
-  rateLimit,
+  checkUpstreamCooldown,
   onUpstreamRateLimited,
   maxRequestBytes = 1_048_576,
   upstreamTimeoutMs = 10_000,
@@ -293,20 +293,20 @@ export async function handleMcpRequest(request, props, {
     headers["Content-Type"] = "application/json";
   }
 
-  if (typeof rateLimit !== "function") {
+  if (typeof checkUpstreamCooldown !== "function") {
     return rpcError(id, -32000, "Upstream requests are temporarily unavailable.", 503);
   }
 
   try {
-    const decision = await rateLimit();
+    const decision = await checkUpstreamCooldown();
     if (!decision?.allowed) {
       const retryAfter = Math.max(1, Number(decision?.retryAfterSeconds) || 1);
-      return rpcError(id, -32029, "SyrianFatora request quota is temporarily exhausted. Retry later.", 429, {
+      return rpcError(id, -32029, "SyrianFatora has temporarily asked this workspace to wait. Retry later.", 429, {
         "Retry-After": retryAfter,
       });
     }
   } catch {
-    return rpcError(id, -32000, "Upstream requests are temporarily unavailable because rate limiting could not be verified.", 503);
+    return rpcError(id, -32000, "SyrianFatora cooldown status is temporarily unavailable.", 503);
   }
 
   try {

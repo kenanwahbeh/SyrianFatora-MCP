@@ -29,8 +29,6 @@ export class CredentialRateLimiter extends DurableObject {
 
   _maxRetentionWindowMs() {
     const seconds = [
-      positiveInteger(this.env, "RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS"),
-      positiveInteger(this.env, "RATE_LIMIT_GRANT_WINDOW_SECONDS"),
       positiveInteger(this.env, "RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS"),
       positiveInteger(this.env, "RATE_LIMIT_AUTH_IP_WINDOW_SECONDS"),
     ];
@@ -72,7 +70,7 @@ export class CredentialRateLimiter extends DurableObject {
           return {
             allowed: false,
             retryAfterSeconds: retryAfterSeconds(Number(row.oldest_event), entry.windowMs, now),
-            reason: "quota_exceeded",
+            reason: "attempt_limit_exceeded",
           };
         }
         accepted.push(entry);
@@ -105,47 +103,41 @@ export class CredentialRateLimiter extends DurableObject {
         "RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS",
         "auth_credential_attempts"
       ),
-      windowConfig(
-        this.env,
-        "RATE_LIMIT_CREDENTIAL_MAX_REQUESTS",
-        "RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS",
-        "credential"
-      ),
     ]);
   }
 
-  consumeProxy({ grantFingerprint }) {
-    if (typeof grantFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(grantFingerprint)) {
-      throw new Error("Rate-limit identity is invalid.");
-    }
-    return this._consume([
-      windowConfig(
-        this.env,
-        "RATE_LIMIT_GRANT_MAX_REQUESTS",
-        "RATE_LIMIT_GRANT_WINDOW_SECONDS",
-        "grant:" + grantFingerprint
-      ),
-      windowConfig(
-        this.env,
-        "RATE_LIMIT_CREDENTIAL_MAX_REQUESTS",
-        "RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS",
-        "credential"
-      ),
-    ]);
+  checkUpstreamCooldown() {
+    return this.ctx.storage.transactionSync(() => {
+      const now = Date.now();
+      const cooldown = this.ctx.storage.sql.exec(
+        "SELECT until_ms FROM rate_cooldowns WHERE id = 1"
+      ).toArray()[0];
+      if (cooldown && Number(cooldown.until_ms) > now) {
+        return {
+          allowed: false,
+          retryAfterSeconds: Math.max(1, Math.ceil((Number(cooldown.until_ms) - now) / 1000)),
+          reason: "upstream_cooldown",
+        };
+      }
+      return { allowed: true };
+    });
   }
 
   recordUpstream429({ retryAfterHeader }) {
-    const fallback = positiveInteger(this.env, "RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS");
-    let requested = fallback;
+    let requested = null;
     if (typeof retryAfterHeader === "string" && retryAfterHeader.trim()) {
-      const seconds = Number(retryAfterHeader.trim());
+      const header = retryAfterHeader.trim();
+      const seconds = Number(header);
       if (Number.isFinite(seconds) && seconds >= 0) {
-        requested = Math.max(fallback, Math.ceil(seconds));
+        requested = Math.ceil(seconds);
       } else {
-        const dateMs = Date.parse(retryAfterHeader);
-        if (Number.isFinite(dateMs)) requested = Math.max(fallback, Math.ceil((dateMs - Date.now()) / 1000));
+        const dateMs = Date.parse(header);
+        if (Number.isFinite(dateMs)) requested = Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
       }
     }
+    // Only apply a cooldown explicitly requested by SyrianFatora. Never invent
+    // a local fallback window when the provider omits Retry-After.
+    if (requested === null || requested <= 0) return { recorded: false, retryAfterSeconds: null };
     const untilMs = Date.now() + requested * 1000;
     if (!Number.isSafeInteger(untilMs)) throw new Error("Rate-limit cooldown is invalid.");
     this.ctx.storage.transactionSync(() => {

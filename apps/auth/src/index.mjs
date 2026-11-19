@@ -3,7 +3,7 @@ import {
   OAuthAuthorizationServer,
 } from "@cloudflare/workers-oauth-provider";
 import { WorkerEntrypoint, env } from "cloudflare:workers";
-import { enforceAuthorizationRateLimit, RateLimitError } from "./rate-limit-client.mjs";
+import { enforceAuthorizationAbuseProtection, AuthorizationAbuseError } from "./rate-limit-client.mjs";
 import {
   CredentialValidationError,
   escapeHtml,
@@ -136,7 +136,7 @@ async function authorize(request, workerEnv) {
   });
 
   const apiKey = String(form.get("api_key") ?? "").trim();
-  await enforceAuthorizationRateLimit(request, apiKey, workerEnv);
+  await enforceAuthorizationAbuseProtection(request, apiKey, workerEnv);
   await validateSyrianFatoraKey(apiKey);
 
   // The provider encrypts props at rest and returns them only to the resource server.
@@ -190,7 +190,7 @@ export class SyrianFatoraAuth extends WorkerEntrypoint {
         });
       }
 
-      if (error instanceof RateLimitError) {
+      if (error instanceof AuthorizationAbuseError) {
         const headers = securityHeaders(new Headers({ "Content-Type": "text/plain; charset=utf-8" }));
         if (error.retryAfterSeconds) headers.set("Retry-After", String(error.retryAfterSeconds));
         return new Response(

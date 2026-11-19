@@ -65,7 +65,7 @@ test("read-only customer listing forwards the grant key only upstream", async ()
     name: "customers_list",
     arguments: { query: { page: 2, per_page: 10, active: true } },
   }), props, {
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async (url, options) => {
       observed = { url, options };
       return Response.json({ data: [{ id: "customer-1" }] }, {
@@ -104,7 +104,7 @@ test("write operations are allowed when mcp:write is granted", async () => {
     arguments: { body: { customer_id: "c-1" } },
   }), props, {
     requireWriteScope: () => null,
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async (url, options) => {
       observed = { url, options };
       return Response.json({ id: "invoice-1" }, { status: 201 });
@@ -152,7 +152,7 @@ test("redacts the upstream API key if the upstream response echoes it", async ()
     name: "customers_list",
     arguments: {},
   }), props, {
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async () => Response.json({ debug: apiKey }),
   });
   const text = (await json(response)).result.content[0].text;
@@ -191,7 +191,7 @@ test("aborts slow upstream requests after the configured timeout", async () => {
     name: "customers_list",
     arguments: {},
   }), props, {
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     upstreamTimeoutMs: 20,
     fetchImpl: async (_url, options) => {
       observedSignal = options.signal;
@@ -217,7 +217,7 @@ test("does not reveal upstream fetch exceptions or credentials", async () => {
     name: "customers_list",
     arguments: {},
   }), props, {
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async () => { throw new Error(`request failed: ${apiKey}`); },
   });
   const body = await json(response);
@@ -228,7 +228,7 @@ test("does not reveal upstream fetch exceptions or credentials", async () => {
 });
 
 
-test("fails closed when no rate limiter is provided", async () => {
+test("fails closed when no upstream cooldown guard is provided", async () => {
   let called = false;
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "customers_list",
@@ -241,18 +241,19 @@ test("fails closed when no rate limiter is provided", async () => {
   assert.equal(called, false);
 });
 
-test("blocks upstream calls when the shared quota is exhausted", async () => {
+test("blocks upstream calls only while SyrianFatora Retry-After cooldown is active", async () => {
   let called = false;
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "customers_list",
     arguments: {},
   }), props, {
-    rateLimit: async () => ({ allowed: false, retryAfterSeconds: 23 }),
+    checkUpstreamCooldown: async () => ({ allowed: false, retryAfterSeconds: 23, reason: "upstream_cooldown" }),
     fetchImpl: async () => { called = true; return Response.json({}); },
   });
 
   assert.equal(response.status, 429);
   assert.equal(response.headers.get("Retry-After"), "23");
+  assert.match((await response.clone().json()).error.message, /SyrianFatora has temporarily asked/);
   assert.equal(called, false);
 });
 
@@ -262,7 +263,7 @@ test("records the provider Retry-After when upstream returns 429", async () => {
     name: "customers_list",
     arguments: {},
   }), props, {
-    rateLimit: async () => ({ allowed: true }),
+    checkUpstreamCooldown: async () => ({ allowed: true }),
     onUpstreamRateLimited: async (value) => { recorded = value; },
     fetchImpl: async () => Response.json(
       { message: "rate limited" },
