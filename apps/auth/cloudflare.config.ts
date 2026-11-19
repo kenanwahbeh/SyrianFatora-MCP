@@ -16,6 +16,7 @@ export default defineConfig(({ isPreview }) => ({
 			CredentialRateLimiter: exports.durableObject({ storage: "sqlite" }),
 		},
 		workersDev: true,
+		previewUrls: false,
 		observability: {
 			enabled: true,
 			redactQueryString: true,
