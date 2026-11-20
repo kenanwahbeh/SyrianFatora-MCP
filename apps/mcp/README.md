@@ -11,6 +11,8 @@ The OAuth-protected MCP resource server for SyrianFatora. It preserves the exist
 - Requires both `mcp:read` and `mcp:write` for create, update, and delete operations.
 - Preserves existing tool request/response semantics, including the payment-void reason requirement.
 - Applies bounded request handling and avoids returning the upstream API key in echoed responses.
+- Validates browser `Origin` headers against the exact `MCP_ALLOWED_ORIGINS` allowlist; native clients without an `Origin` header remain supported.
+- Requires a supported `MCP-Protocol-Version` header on every POST after `initialize`.
 - Validates tool-call arguments against each published `inputSchema` before forwarding a request.
 - Validates browser `Origin` headers on `/mcp`; requests without `Origin` remain supported for non-browser MCP clients.
 - Negotiates only the supported MCP protocol versions (`2025-03-26` and `2024-11-05`) and rejects unsupported version headers.
@@ -35,6 +37,12 @@ A credential-scoped cooldown is stored only when SyrianFatora returns HTTP 429 w
 The MCP endpoint accepts requests with no `Origin` header for non-browser clients. If a browser client sends `Origin`, the value must exactly match the MCP endpoint origin or an entry in the optional `MCP_ALLOWED_ORIGINS` Worker variable.
 
 Set `MCP_ALLOWED_ORIGINS` to a comma-separated list of exact origins, including scheme and port where applicable (for example, `https://chat.example.com,https://app.example.com`). Paths, wildcards, opaque `null` origins, and non-canonical values are rejected. Determine the actual browser-client origin before configuring it; do not guess or broadly allow all origins. No production Worker variable or deployment is changed by this source change.
+
+## MCP browser-origin configuration
+
+Set `MCP_ALLOWED_ORIGINS` to a comma-separated list of exact HTTPS origins permitted to call `/mcp` from browsers. Do not include paths or trailing slashes. An empty allowlist rejects browser-originated MCP requests with HTTP 403; requests without an `Origin` header remain supported for native MCP clients. Loopback HTTP origins are accepted only when explicitly allowlisted for local development. Configure the production allowlist for the intended MCP client before deploying this change.
+
+The Worker negotiates `2025-03-26` or `2024-11-05` during `initialize`. All subsequent POST messages must carry the negotiated value in `MCP-Protocol-Version`; missing or unsupported values are rejected with HTTP 400.
 
 ## Development
 
