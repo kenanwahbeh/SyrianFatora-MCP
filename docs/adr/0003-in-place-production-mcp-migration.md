@@ -25,7 +25,7 @@ The production Cloudflare Worker `syrianfatora-mcp` already serves the public MC
 - Production issuer/resource URLs and KV namespace ID were discovered and verified before production configuration was committed.
 - The auth Worker was deployed and verified before the existing MCP Worker was switched to OAuth.
 - The legacy production script remains archived as the pre-migration baseline; immediate rollback targets are recorded per Worker in the production migration log.
-- End-to-end OAuth behavior remains unverified until a real Workspace-key authorization flow and authenticated read-only tool call are completed.
+- A later operator-confirmed production read-only OAuth Authorization Code + PKCE smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and `customers_list`. Refresh/revocation lifecycle and user-facing disconnect/replacement behavior remain separate outstanding items.
 
 ## Follow-up implementation
 
