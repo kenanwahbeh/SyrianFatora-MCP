@@ -20,13 +20,17 @@
 
 ## Credential handling
 
+The upstream API key is stored in provider-encrypted grant properties and returned only to the internal MCP resource Worker after successful token validation. Each authorization has a random, per-grant subject; the current read-only validation response does not provide a stable Workspace identifier, so reauthorization creates a separate grant rather than replacing an earlier one.
+
+**Current lifecycle gap:** Auth v6 has a global refresh-token TTL, so it may issue refresh tokens even when the consent page's optional `offline_access` scope was not approved. Draft PR #54 adds a callback to issue refresh tokens only when the client requested and the user approved that scope. It also tests the distinction between access-token revocation and full refresh-token/grant revocation. This correction is not merged or deployed; do not run additional real-key tests until it is reviewed and the ordered gates are closed.
+
 - Collect the upstream key only on the first-party HTTPS authorization page.
 - Validate credentials with the harmless read-only `GET /customers?per_page=1` endpoint.
 - Validation requires `customers.read`; a 403 is not automatically an invalid key.
 - The validation endpoint is fixed to `https://syrianfatora.com/api/public/v1/customers?per_page=1`; redirects are rejected.
 - Never place credentials in URL parameters, analytics, logs, error traces, browser local storage, hidden form fields, or plugin configuration.
 - Do not create a separate plaintext KV record for the API key.
-- Implement a disconnect/revoke action that invalidates OAuth grants and deletes or invalidates the associated upstream credential. This UX is still outstanding.
+- Add a user-facing disconnect/replacement flow that invokes OAuth grant revocation and clearly handles the associated upstream credential. The provider-level revocation semantics exist, but this user-facing UX is still outstanding.
 
 ## Authorization abuse protection and provider quota
 
@@ -53,16 +57,18 @@ SyrianFatora response headers `X-RateLimit-Limit` and `X-RateLimit-Remaining`, t
 - Keep the production resource Worker name exactly `syrianfatora-mcp`.
 - Deploy the authorization Worker as a separate internal dependency; do not replace the MCP Worker with it.
 - Capture the exact live MCP script, settings, bindings, versions, and deployment metadata before any overwrite.
-- Never use `--force` solely to bypass a script API conflict without verifying the complete replacement artifact and rollback.
+- Never configure `--force` in an automatic CI or Cloudflare Build production trigger. A one-time migration exception requires separate explicit approval, a captured live baseline, a verified replacement artifact, and a documented rollback.
 - Never use a real production workspace for write-operation smoke tests.
 - Limit smoke tests to health, OAuth metadata/discovery, MCP initialize, tools/list, invalid-token rejection, and safe read-only upstream requests.
 - Set request size limits, no-store response headers for sensitive endpoints, and conservative CORS/Content Security Policy.
-- Verify the authorization-attempt abuse guard and provider-directed 429 cooldown bindings before production traffic is enabled. Do not add local request quotas to MCP traffic.
+- The authorization-attempt abuse guard and provider-directed 429 cooldown bindings are deployed and were verified in production; see the production migration log. Do not add local request quotas to MCP traffic.
 - Redact sensitive headers, query strings, and authorization form bodies in observability.
 
-## Testing exception
+## Testing and production evidence
 
-PR #14 adds focused Node tests for the Auth and MCP rate-limit clients. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: Auth run #74 and MCP run #59 each passed dependency installation, `npm run build:check`, and `npm test`. The tests mock the Durable Object namespace and do not prove SQLite atomicity or real concurrent consumption. These client tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or real concurrent consumption. Direct Durable Object tests and production read-only configuration verification remain release gates. No production write-operation tests are allowed.
+The historical PR #14 test exception was superseded by the later SQLite-backed Durable Object test suite. On `main`, the Auth suite passes 41/41 tests, including concurrent authorization-attempt serialization; the MCP suite passes 24/24 tests. Both Cloudflare Build triggers run `npm audit --audit-level=high`, `npm run build:check`, and `node --test` before deployment. The current deployed Auth and MCP versions and their health/discovery probes are recorded in `docs/production-migration.md`.
+
+A separate operator-confirmed production read-only OAuth smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), using Authorization Code + PKCE, `mcp:read`, authenticated MCP initialization/tool discovery, and `customers_list` (`per_page=1`). This evidence does not verify refresh-token rotation, client-side revocation, or disconnect/replacement UX. Because gates 1–5 are not all formally closed, further real-key testing remains NO-GO. No production write-operation tests are allowed.
 
 ## Incident response
 
@@ -72,4 +78,4 @@ If a key is exposed, revoke it in SyrianFatora, invalidate related OAuth grants,
 
 SyrianFatora's official developer documentation specifies a default daily quota of 1,000 requests per workspace, which can be increased on request. The documentation says requests, including 429 responses, are recorded in workspace usage/audit logs; this audit-log statement should not be interpreted as proof that every 429 consumes the daily allowance. Paid plans add a monthly quota tied to the billing cycle; the public documentation does not specify one universal monthly value. Responses expose X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses expose Retry-After. Source: https://syrianfatora.com/developers
 
-The implementation currently coordinates usage by keyed API-credential fingerprint. This strictly shares usage across OAuth grants using the same key, but it does not merge multiple distinct API keys belonging to one workspace. Since the upstream quota is workspace-wide, production rollout must either enforce one active API key per workspace or obtain a stable workspace identifier from SyrianFatora and key the shared quota by that identity. Monthly plan limits remain enforced by the upstream provider; local cooldown handling honors its 429 Retry-After.
+The implementation does not coordinate or meter workspace usage locally. The HMAC credential fingerprint is used only for authorization-attempt protection and provider-directed cooldown state; it does not merge distinct API keys into a workspace identity. No local workspace aggregation is needed because SyrianFatora remains the sole quota authority. Monthly plan limits remain provider-enforced, and local cooldown handling honors only a valid provider `Retry-After`.

@@ -8,19 +8,22 @@ Secure remote Model Context Protocol (MCP) gateway for the SyrianFatora public A
 
 Let a user connect their SyrianFatora workspace to ChatGPT or another compatible MCP client, then manage and read permitted billing resources through the existing MCP tool catalogue. Users must enter their SyrianFatora API key only on the first-party HTTPS authorization page; the key must never be pasted into chat, sent to the MCP client, or stored in a plugin package.
 
-## Production status — 2026-11-19
+## Production status — 2026-11-20
 
-**Status: Production migration deployed.**
+**Status: Production OAuth infrastructure deployed; read-only OAuth smoke completed successfully with two real Workspace keys. Further testing remains NO-GO pending the ordered release gates.**
 
-- Auth Worker: https://syrianfatora-auth.kinan-api.workers.dev.
-- Existing MCP Worker migrated in place: https://syrianfatora-mcp.kinan-api.workers.dev/mcp.
-- OAuth issuer, authorization discovery, and protected-resource metadata are live.
-- MCP health reports **51 tools**; the existing tool catalogue is preserved.
-- Production smoke tests passed: Auth/MCP health, OAuth discovery, protected-resource metadata, and invalid bearer-token rejection (401).
-- GitHub Actions: 40 Auth tests and 21 MCP tests pass. SQLite Durable Object concurrency and provider-429 cooldown tests pass.
-- `npm audit --audit-level=high` reports zero vulnerabilities with the Cloudflare Build npm version (10.9.2); CI and Cloudflare Builds now enforce this gate.
+- Auth Worker: https://syrianfatora-auth.kinan-api.workers.dev — version #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`, deployment `34b83009-a63b-418b-ace6-a9365ad70cf3`.
+- Existing MCP Worker: https://syrianfatora-mcp.kinan-api.workers.dev/mcp — version #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2`, deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`.
+- OAuth issuer, authorization discovery, and protected-resource metadata are live; MCP health reports **51 tools**.
+- Production probes verified health, OAuth discovery, protected-resource metadata, and invalid bearer-token rejection (401). Separately, the operator confirmed successful production OAuth Authorization Code + PKCE smoke tests with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and the read-only `customers_list` call. No write operation was tested.
+- GitHub Actions: 41 Auth tests and 24 MCP tests pass on `main`; SQLite Durable Object concurrency and provider-directed 429 cooldown tests are covered.
+- `npm audit --audit-level=high` reports zero vulnerabilities; Cloudflare Build triggers run audit, build, and tests.
+- Both live production Build triggers deploy without `--force`; the flag is not configured in either automatic trigger.
 - Production `workers.dev` endpoints remain enabled; public version-preview URLs are disabled.
-- **Not yet verified:** completing OAuth token issuance and refresh using a real SyrianFatora workspace API key. Unit tests use synthetic keys; do not paste a real key into chat.
+- **Preview cleanup completed:** PR #52 is merged; production `/oauth/client-metadata.json` returns 404 and the live MCP version has `IS_PREVIEW=false`. The isolated Preview Worker remains available.
+- **Rollback caution:** immediate MCP rollback version #9 predates the Preview cleanup and re-exposes the Preview client metadata endpoint.
+- **Confirmed OAuth lifecycle gap:** Auth v6 may issue refresh tokens even when optional `offline_access` was not approved; the correction is prepared in draft PR #54 and is not deployed.
+- **NO-GO for further testing:** the two-key read-only smoke test is recorded as completed, but it does not close the ordered release gates. Token refresh/revocation lifecycle and user-facing disconnect/replacement behavior remain unresolved; do not run further real-key tests until gates 1–5 are formally closed.
 
 ## Agreed production architecture
 
@@ -38,7 +41,7 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 3. Keep the separate authorization Worker as the OAuth architecture dependency.
 4. Keep the production issuer/resource URLs and KV/DO bindings aligned with the Cloudflare configuration.
 5. Preserve a rollback path to the previous MCP script version before any future production overwrite.
-6. Never configure `--force` in an automatic CI or Cloudflare Build production trigger. A one-time `--force` migration is permitted only with separate explicit approval, after capturing the live Worker version and metadata, verifying the complete replacement artifact, and documenting a rollback reference; remove the flag from the trigger immediately afterward.
+6. Never configure `--force` in an automatic CI or Cloudflare Build production trigger. A one-time migration exception requires separate explicit approval, a captured live version/metadata baseline, a verified replacement artifact, and a documented rollback; remove the flag from the trigger immediately afterward.
 7. Run dependency audit, build checks, and unit tests before deployment. Run only read-only smoke tests against production; never test create/update/delete operations against a real workspace.
 8. Never put API keys, OAuth tokens, signing keys, KV secrets, or Cloudflare credentials in Git, issues, logs, or chat.
 9. Record production resources, version IDs, deployment IDs, probes, and rollback references in [the production migration log](docs/production-migration.md).

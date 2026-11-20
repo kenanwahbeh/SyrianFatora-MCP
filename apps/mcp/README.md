@@ -9,8 +9,9 @@ This package is the OAuth-protected resource server for the existing production 
 - This is the existing MCP resource service, migrated in place.
 - Do not deploy a second MCP Worker as a replacement or use the Preview name in production.
 - Preserve the existing public MCP endpoint identity and all 51 tool definitions.
-- Current production version: `392a040a-eff8-421d-952b-0075dc74e703` (version 6).
-- Current deployment: `6fe36215-6e5d-4368-8744-ea90473b78c3`.
+- Current production version: `8b7e8158-b175-44fe-98d5-4f151eef51f2` (version 10).
+- Current deployment: `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic).
+- Immediate rollback version: `ef5d0c42-9375-42b2-81e4-73b734707b22` (version 9); deployment `d1f2fbf3-e4e6-46f6-bd3c-8283dc80ff0c`. **Warning:** version 9 re-exposes the Preview CIMD endpoint.
 - Previous rollback version captured before the migration: `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (version 4).
 - Production workers.dev route is enabled; public version-preview URLs are disabled.
 
@@ -59,9 +60,10 @@ The credential HMAC fingerprint is used only to scope authorization anti-abuse a
 
 - `npm audit --audit-level=high`: zero vulnerabilities in the current dependency tree with npm 10.9.2.
 - `npm run build:check`: production Worker build succeeds without deployment.
-- `npm test`: 21 MCP tests pass.
+- `npm test`: 24 MCP tests pass.
 - Production smoke checks pass for MCP health, OAuth protected-resource metadata at `/.well-known/oauth-protected-resource/mcp`, 51 tools reported by health, and rejection of an invalid bearer token with HTTP 401.
-- **Not yet verified:** successful authenticated `initialize` and `tools/list` using a token issued after validating a real SyrianFatora workspace API key. Do not paste a real key into chat.
+- **Real-key smoke verified:** the operator confirmed successful authenticated `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` (`per_page=1`) calls using OAuth sessions authorized with two real Workspace keys (`KEY_1` and `KEY_2`). No write operation was tested; key values and customer records are not recorded.
+- Refresh-token lifecycle, revocation, and user-facing disconnect/replacement remain separate outstanding checks.
 - Never use a production workspace for write-operation tests.
 
 ## Authenticated production OAuth smoke test
@@ -91,10 +93,12 @@ Optional environment overrides:
 
 This is intentionally a local/manual production verification, not a GitHub Actions job: the operator must approve the OAuth request and enter the API key in the browser. Do not put the API key or access token in GitHub Secrets, command-line arguments, source control, or CI logs. A successful run prints a final `PASS` line; failures print only bounded status/error information, not response bodies.
 
+The client-cache serialization fix and mocked OAuth/MCP integration harness are merged in PR #51 and included in the 24-test MCP suite. The mock harness validates the script flow locally; it is not production OAuth evidence and does not use a real Workspace key.
+
 ## Provider response headers
 
 The MCP response includes SyrianFatora's `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` values when present. Those provider values are authoritative. The MCP Worker does not calculate or replace workspace quota locally.
 
 ## Preview deployment
 
-The isolated Preview Worker is separate from production and remains pinned to the `test/durable-object-atomicity` branch. The production Build trigger targets `main` and deploys the existing `syrianfatora-mcp` Worker in place. Public version-preview URLs are disabled for production.
+The isolated Preview Worker is separate from production and remains pinned to the `test/durable-object-atomicity` branch. The production Build trigger targets `main` and deploys the existing `syrianfatora-mcp` Worker in place without `--force`. Public version-preview URLs are disabled for production. PR #52 is merged and deployed: production `/oauth/client-metadata.json` returns 404 and the live `IS_PREVIEW` binding is `false`; the Preview CIMD document remains available only in the isolated Preview environment.

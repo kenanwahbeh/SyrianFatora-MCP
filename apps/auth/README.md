@@ -5,6 +5,8 @@ This is the separate OAuth 2.1 authorization server for the existing `syrianfato
 ## Production identity
 
 - Cloudflare Worker: `syrianfatora-auth`.
+- Current production version: #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`; deployment `34b83009-a63b-418b-ace6-a9365ad70cf3` (100% traffic).
+- Immediate rollback version: #5 `53dfd48f-5b83-49f9-bd8a-229255d82790`; deployment `d66496cb-7e13-48a4-8c4d-433c8dfd560d`.
 - Issuer: https://syrianfatora-auth.kinan-api.workers.dev.
 - Service Binding entrypoint: `SyrianFatoraAuth`.
 - The existing `syrianfatora-mcp` Worker calls it internally through `AUTH_SERVER`.
@@ -57,10 +59,12 @@ Do not add per-credential API request quotas or per-OAuth-grant request quotas. 
 - A 403 from validation means the key lacks `customers.read` or API access is disabled; do not misreport it as an invalid key.
 - The provider encrypts authorization `props`; the resource Worker must not log or expose `props.upstreamApiKey`.
 - The random OAuth subject identifies a grant, not a verified human identity or SyrianFatora workspace ID.
-- Credential replacement and disconnect/revocation UX are not implemented yet.
+- Credential replacement and disconnect/revocation UX are not implemented yet. Reauthorizing creates an independent grant; revoke the previous refresh token before replacing a key.
+- Auth v6 currently has a refresh-token consent mismatch: refresh tokens may be issued even when `offline_access` was not approved. The correction and lifecycle tests are in draft PR #54; it is not deployed.
 - Live production smoke checks passed for `/health`, OAuth discovery, MCP protected-resource metadata, the MCP-to-Auth Service Binding, and rejection of an invalid bearer token with HTTP 401.
-- **Not yet verified:** token issuance and refresh using a real SyrianFatora workspace API key. Do not paste a real key into chat.
-- Auth CI: 40 tests pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown tests.
+- **Real-key smoke verified:** the operator confirmed successful production OAuth Authorization Code + PKCE authorization with two real Workspace keys (`KEY_1` and `KEY_2`). Keys were entered only on the first-party HTTPS authorization page; the smoke used `mcp:read` and performed read-only MCP calls. Key values are not recorded.
+- **Still outstanding:** refresh-token lifecycle behavior, revocation from the client/ChatGPT side, and user-facing disconnect/replacement UX. The Auth v6 `offline_access` mismatch remains tracked in draft PR #54.
+- Auth CI on `main`: 41 tests pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown tests.
 - `npm audit --audit-level=high` currently reports zero vulnerabilities; the CI and Cloudflare Build pipelines enforce this gate.
 
 ## Shared guard and secrets

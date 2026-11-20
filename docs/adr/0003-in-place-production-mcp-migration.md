@@ -1,6 +1,6 @@
 # ADR 0003: In-place production MCP migration
 
-- **Status:** Accepted
+- **Status:** Accepted and implemented
 - **Date:** 2026-11-18
 - **Decision owners:** Project maintainer and assistant implementation session
 
@@ -22,7 +22,11 @@ The production Cloudflare Worker `syrianfatora-mcp` already serves the public MC
 ## Consequences
 
 - There will be two Cloudflare Workers, but only one public MCP resource service. The auth Worker is a supporting OAuth endpoint.
-- Production issuer/resource URLs and KV namespace ID must be discovered and verified before production configuration is committed.
-- The auth Worker must be deployed and verified before the existing MCP Worker is switched to OAuth.
-- The legacy production script remains the rollback baseline until the in-place migration is confirmed.
-- End-to-end OAuth behavior remains unverified until a real client authorization flow is completed.
+- Production issuer/resource URLs and KV namespace ID were discovered and verified before production configuration was committed.
+- The auth Worker was deployed and verified before the existing MCP Worker was switched to OAuth.
+- The legacy production script remains archived as the pre-migration baseline; immediate rollback targets are recorded per Worker in the production migration log.
+- A later operator-confirmed production read-only OAuth Authorization Code + PKCE smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and `customers_list`. Refresh/revocation lifecycle and user-facing disconnect/replacement behavior remain separate outstanding items.
+
+## Follow-up implementation
+
+The initial migration's test deferral was temporary. Subsequent work added the Auth SQLite Durable Object concurrency tests and the full Auth/MCP CI gates. On `main`, Auth passes 41/41 tests and MCP passes 24/24 tests. Production health, OAuth discovery, protected-resource metadata, tool count, and invalid-token rejection were verified. The later operator-confirmed two-key production smoke completed OAuth and authenticated read-only MCP calls; refresh/revocation lifecycle and disconnect/replacement UX remain outstanding.

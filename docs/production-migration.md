@@ -1,20 +1,23 @@
 # Production migration runbook and execution log
 
-**Last updated:** 2026-11-19  
-**Status:** Production OAuth migration deployed. Auth and MCP production smoke checks passed. Real-key OAuth token issuance/refresh remains unverified.
+**Last updated:** 2026-11-20
 
-## Current production state — 2026-11-19
+**Status:** Production OAuth infrastructure deployed. An operator-confirmed read-only OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Further real-key testing remains NO-GO pending the six ordered gates in `docs/implementation-plan.md`; refresh/revocation lifecycle and disconnect/replacement UX remain outstanding.
+
+## Current production state — 2026-11-20
 
 | Item | Verified production value |
 | --- | --- |
 | Cloudflare account subdomain | `kinan-api` |
 | Auth Worker | `syrianfatora-auth` |
 | Auth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
-| Auth version / deployment | v3 `749ba335-b8ab-491c-8e7a-c4d703056ad6` / `6f6c17ce-db28-4b4b-bf3f-a2e5195d1a62` |
+| Auth version / deployment | v6 `2f25855b-9299-47a1-88f6-65bf04f48da9` / `34b83009-a63b-418b-ace6-a9365ad70cf3` (100% traffic) |
+| Auth immediate rollback | v5 `53dfd48f-5b83-49f9-bd8a-229255d82790` / `d66496cb-7e13-48a4-8c4d-433c8dfd560d` |
 | Existing MCP Worker | `syrianfatora-mcp` (migrated in place) |
 | MCP resource URL | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
-| MCP version / deployment | v6 `392a040a-eff8-421d-952b-0075dc74e703` / `6fe36215-6e5d-4368-8744-ea90473b78c3` |
-| MCP rollback version | v4 `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (captured before code migration; secret already present) |
+| MCP version / deployment | v10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` / `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic) |
+| MCP immediate rollback | v9 `ef5d0c42-9375-42b2-81e4-73b734707b22` / `d1f2fbf3-e4e6-46f6-bd3c-8283dc80ff0c` (rollback reintroduces the Preview metadata endpoint) |
+| MCP pre-migration baseline | v4 `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (captured before code migration; secret already present) |
 | OAuth KV | `syrianfatora-oauth-production`, `d19d9bd755c349f688cd55e299b8168f` |
 | SQLite Durable Object | `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
 | Shared HMAC secret | `RATE_LIMIT_HMAC_SECRET` exists on both Workers; same random 48-byte value, never logged |
@@ -25,7 +28,7 @@
 
 The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` and `RATE_LIMITER` bound to the Auth Worker's SQLite Durable Object namespace. The Auth Worker has the production KV binding and the same HMAC secret. No custom domain or DNS record was changed.
 
-**Rollback note:** MCP version 4 is the captured pre-migration production script with the shared secret already present; it is the rollback target for the in-place MCP code migration. The Auth Worker did not exist before this cutover: versions 1 and 2 were bootstrap placeholders, and version 3 is its first functional production release. There is no earlier functional Auth version to roll back to; preserve version 3 as the known-good baseline for subsequent releases.
+**Rollback note:** The immediate rollback targets are Auth v5 (`53dfd48f-5b83-49f9-bd8a-229255d82790`) and MCP v9 (`ef5d0c42-9375-42b2-81e4-73b734707b22`). MCP v9 predates the Preview cleanup and re-exposes the Preview metadata endpoint; if rollback is required, reapply the Preview gate before declaring the production interface clean. MCP v4 (`ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5`) remains the captured pre-migration baseline. Auth v3 was the first functional production release; v5 is the immediate known-good predecessor to current v6.
 
 ### Verification
 
@@ -35,10 +38,11 @@ The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` a
 - MCP protected-resource metadata: HTTP 200 at `/.well-known/oauth-protected-resource/mcp`; advertises the Auth issuer.
 - MCP request with a deliberately invalid bearer token: HTTP 401.
 - GitHub Actions production smoke runs `44456841885` (initial cutover) and `44457599094` (after final MCP version 6 and preview-URL disablement) both completed successfully on 2026-11-19.
-- Auth unit tests: 40/40 pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
-- MCP unit tests: 21/21 pass.
+- Auth unit tests: 41/41 pass on the deployed v6 source, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
+- MCP unit tests on `main`: 24/24 pass.
 - `npm audit --audit-level=high`: zero vulnerabilities for both packages using npm 10.9.2, matching Cloudflare Build.
-- **Still outstanding:** full authorization-code/token/refresh flow using a real SyrianFatora workspace key. No real key was shared or used in this migration. No write operations were tested against a production workspace.
+- **Completed separately:** an operator-confirmed production Authorization Code + PKCE smoke using two real Workspace keys (`KEY_1` and `KEY_2`), with `mcp:read` only and authenticated MCP calls. See the dedicated evidence section below.
+- **Still outstanding:** refresh-token lifecycle/rotation, client-side revocation behavior, and user-facing disconnect/replacement UX. No production write operations were tested.
 
 
 
@@ -104,7 +108,7 @@ The reported conflict was:
 - The live Worker was last updated through the script API.
 - Cloudflare warned that a CLI upload would override script-API edits and aborted, suggesting `cf deploy --force`.
 
-No successful production overwrite was reported from this failed build. The 2026-11-19 in-place migration was performed only after the live MCP script/version and rollback reference were captured, the production config was reviewed, and the intended overwrite was explicitly approved. Any `--force` use for that migration was a one-time exception, not a standing deployment setting. A read-only inspection of the live Cloudflare Build configuration on 2026-11-20 confirmed that the current MCP production trigger deploy command is `npx cf deploy --prebuilt --mode production` with no `--force`; the Auth trigger has the same no-force policy.
+No successful production overwrite was reported from this failed build. The later in-place migration was separately reviewed after the live MCP script/version and rollback reference were captured. Any `--force` use was a one-time migration exception, not a standing deployment setting. A read-only inspection on 2026-11-20 confirmed that both current production Cloudflare Build triggers deploy with `npx cf deploy --prebuilt --mode production` and contain no `--force`.
 
 ## Provider quota and abuse-protection behavior
 
@@ -115,7 +119,7 @@ The source change removes the competing local usage quotas:
 4. After SyrianFatora returns HTTP 429, a cooldown is stored only if the response contains a valid Retry-After value. The provider's duration is used as-is; no fallback is invented.
 5. No automatic retry is performed. The provider's 429 and quota headers remain authoritative.
 
-No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Production deployment still requires the usual independent checks of Worker bindings, secrets, generated Durable Object metadata, endpoint identity, and rollback readiness.
+No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Before production cutover, Worker bindings, secret presence, generated Durable Object metadata, endpoint identity, and rollback references were independently checked; the current deployed versions and their verification results are recorded above.
 
 ## Production configuration — completed
 
@@ -139,7 +143,7 @@ No workspace quota thresholds need to be selected or configured locally. The HMA
 - Trigger ID: `76787337-ed7e-49da-897a-39f548a65b91`
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/auth`
-- Build: `npm audit --audit-level=high && npm run build:check`
+- Build: `npm audit --audit-level=high && npm run build:check && node --test`
 - Deploy: `npx cf deploy --prebuilt --mode production`
 - Paths: `apps/auth/**`, `apps/auth/package.json`, `apps/auth/package-lock.json`
 
@@ -148,11 +152,11 @@ No workspace quota thresholds need to be selected or configured locally. The HMA
 - Trigger ID: `593221cf-b17a-4506-979a-ebb7f4307c69`
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/mcp`
-- Build: `npm audit --audit-level=high && npm run build:check`
-- Deploy: `npx cf deploy --prebuilt --mode production` (verified against the live Cloudflare Build trigger on 2026-11-20; no `--force`)
+- Build: `npm audit --audit-level=high && npm run build:check && node --test`
+- Deploy: `npx cf deploy --prebuilt --mode production` (verified 2026-11-20; no `--force`)
 - Paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
 
-Both triggers are path-scoped so documentation-only changes do not start production deployments. The Auth and MCP build triggers are independent; Auth was deployed first, then the existing MCP Worker was updated in place.
+Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production deployments. The deploy command on each trigger contains no `--force`; any future one-time migration exception must be explicitly approved and must not be persisted in the trigger.
 
 ## Execution log
 
@@ -176,7 +180,7 @@ Both triggers are path-scoped so documentation-only changes do not start product
 | 2026-11-19T04:16Z | Final MCP production deployment | Version 6 `392a040a-eff8-421d-952b-0075dc74e703`; deployment `6fe36215-6e5d-4368-8744-ea90473b78c3`; public preview URLs disabled |
 | 2026-11-19 | Production smoke tests | Auth/MCP health, OAuth discovery, protected-resource metadata, 51-tool health count, and invalid-token HTTP 401 all passed |
 | 2026-11-19 | Dependency audit and unit tests | npm 10.9.2 audit: zero vulnerabilities; Auth 40/40 tests; MCP 21/21 tests; SQLite concurrency test passed |
-| 2026-11-19 | Real-key OAuth end-to-end | Not run; requires a real SyrianFatora workspace key entered through the first-party authorization page. No key was shared in chat and no workspace writes were performed |
+| 2026-11-19 | Real-key OAuth end-to-end (status at time of entry) | Not yet run at the time this historical log entry was written; later two-key read-only smoke evidence is recorded in the 2026-11-20 section below. No workspace writes were performed |
 
 ## Change record template
 
@@ -272,14 +276,58 @@ This section supersedes earlier PR #14 notes in this file that described local p
 | 2026-11-20T02:23:42Z | Post-deployment read-only smoke checks | `/health` returned `ok: true`; OAuth discovery returned the expected issuer, authorization/token endpoints, and `mcp:read`, `mcp:write`, `offline_access` scopes. Cloudflare secret-binding inventory confirms `RATE_LIMIT_HMAC_SECRET` remains present; secret value was not read. |
 | 2026-11-20 | Rollback reference | Previous Auth Worker version #4 `93411491-de13-4cd9-8d7e-d441d07ad674`, deployment `67a91b5b-9b1b-4ca0-8af6-b88a657dc543`. |
 
-The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. The GitHub PR remains separate from the production build; no merge to `main` was performed.
+The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. PR #49 was subsequently merged to `main` at commit `b81461cf619d17da77d384149711fd0fe78abb7f`. That merge triggered the current Auth v6 Cloudflare Build; it did not change the MCP Worker.
 
+## Current deployment verification — 2026-11-20
 
-## Deployment gate hardening — 2026-11-20
+| Worker | Successful Cloudflare Build | Source commit | Deployed version | Deployment |
+| --- | --- | --- | --- | --- |
+| Auth | `0c5e5ce8-09ed-4351-bcaa-c27f9c4cf8aa` | `b81461cf619d17da77d384149711fd0fe78abb7f` (merge of PR #49) | #6 `2f25855b-9299-47a1-88f6-65bf04f48da9` | `34b83009-a63b-418b-ace6-a9365ad70cf3` |
+| MCP (Preview cleanup) | `249f8daf-d0c8-41dc-8f9c-91a7d9cb7ff5` | `73d58ac9e438d933bd7a9f5bc54bf7acf902c474` (merge of PR #52) | #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` | `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` |
 
-- Re-inspected both live Cloudflare Build Worker configurations and their trigger records using read-only API calls.
-- Auth production trigger `76787337-ed7e-49da-897a-39f548a65b91`: deploy command is `npx cf deploy --prebuilt --mode production`; `--force` is absent.
-- MCP production trigger `593221cf-b17a-4506-979a-ebb7f4307c69`: deploy command is `npx cf deploy --prebuilt --mode production`; `--force` is absent.
-- Both triggers remain path-scoped to their respective application directories and package manifests, and both target `main`. No trigger settings were changed during this inspection.
-- Repository policy now prohibits persisting `--force` in automatic CI/Cloudflare Build triggers. A one-time migration exception requires separate explicit approval, a captured live version/metadata baseline, verified replacement artifact, and documented rollback; the flag must not remain in the trigger.
-- No Worker, deployment, preview, secret, binding, DNS record, or customer workspace was modified.
+Both builds completed successfully. The Auth and MCP build commands each ran dependency audit, `cf build`, and `node --test`; both production deploy commands omitted `--force`.
+
+Read-only post-deployment probes on 2026-11-20 returned:
+- Auth `/health`: `ok: true`.
+- Auth OAuth discovery: expected issuer, authorization/token endpoints, protected resource, and scopes.
+- MCP `/health`: `ok: true`, `toolCount: 51`.
+
+These unauthenticated probes alone do not establish a Workspace-key OAuth session; the separate two-key authenticated smoke evidence is recorded below.
+
+## Production Preview artifact cleanup — 2026-11-20
+
+Before PR #52, a read-only GET to `https://syrianfatora-mcp.kinan-api.workers.dev/oauth/client-metadata.json` returned HTTP 200 with `SyrianFatora Preview E2E Client` and placeholder redirect URI `https://example.com/oauth/callback`.
+
+PR #52 was merged in commit `73d58ac9e438d933bd7a9f5bc54bf7acf902c474`. Cloudflare Build `249f8daf-d0c8-41dc-8f9c-91a7d9cb7ff5` succeeded and deployed MCP version #10 (`8b7e8158-b175-44fe-98d5-4f151eef51f2`) in deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`.
+
+Post-deployment checks confirmed:
+- `IS_PREVIEW=false` in the live Worker version bindings.
+- Production `/oauth/client-metadata.json` returns HTTP 404.
+- Production `/health` remains `ok: true` with 51 tools.
+- Protected-resource metadata still points to the production MCP resource and Auth issuer.
+
+The isolated Preview Worker and its CIMD test document remain intact. **Rollback warning:** immediate rollback version #9 predates PR #52 and will re-expose the Preview metadata endpoint; if rollback is required, track and reapply the Preview gate before declaring the production interface clean.
+
+## Operator-confirmed two-key production OAuth smoke — 2026-11-20
+
+The operator confirmed that the deployed production OAuth flow was successfully exercised with two real SyrianFatora Workspace keys, referred to here only as `KEY_1` and `KEY_2`. The actual key values are intentionally not recorded.
+
+For each key, the smoke used the first-party HTTPS Auth page and approved `mcp:read` only. The Authorization Code + PKCE flow completed and the authenticated MCP session successfully performed:
+- `initialize`
+- `notifications/initialized`
+- `tools/list` (51-tool catalogue)
+- `customers_list` with `per_page=1`
+
+No create, update, or delete operation was performed. API key values, access tokens, and customer records are not included in this repository.
+
+**Scope of this evidence:** this confirms successful access-token issuance and authenticated read-only MCP execution for both keys. It does not establish refresh-token rotation, client/ChatGPT-side revocation, or user-facing disconnect/replacement behavior. The historical smoke was performed before gates 1–5 were all formally closed; it is recorded as evidence, not as authorization to continue real-key testing out of sequence.
+
+## Current NO-GO release gates
+
+The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. The historical two-key read-only smoke is recorded below. Do not run further real-key tests until all ordered gates are formally closed. Production write operations remain prohibited.
+
+## Credential lifecycle finding — 2026-11-20
+
+A source review confirmed that the API key is stored in provider-encrypted grant `props`, and token validation returns those properties only to the internal MCP Worker. Access-token revocation removes only that token; refresh-token revocation deletes the full grant and encrypted properties. Reauthorization creates an independent grant because no stable Workspace identifier is available; it does not automatically replace an earlier key.
+
+The deployed Auth v6 still has a mismatch between the consent UI and token behavior: its global refresh-token TTL can issue a refresh token even when optional `offline_access` was not approved. Draft PR #54 adds the scope-aware correction and regression tests (43/43 Auth tests passed locally). It is not merged or deployed. User-facing disconnect/replacement UX is not implemented, and ChatGPT's disconnect/revocation behavior is unverified. This is an additional reason further real Workspace-key testing remains NO-GO.

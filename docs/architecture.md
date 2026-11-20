@@ -3,7 +3,7 @@
 ## Decision: preserve the existing MCP Worker and split OAuth authorization
 
 **Decision date:** 2026-11-18  
-**Status:** Accepted for implementation.
+**Status:** Implemented and deployed. A production read-only OAuth smoke was completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`). Further testing remains NO-GO until the ordered release gates are formally closed; refresh/revocation lifecycle and disconnect/replacement UX remain outstanding.
 
 Migrate the existing production MCP resource Worker **in place**. Its Cloudflare service name remains exactly `syrianfatora-mcp`; its existing public MCP endpoint identity and 51-tool catalogue are to be preserved. Do not create a replacement MCP resource Worker.
 
@@ -34,9 +34,7 @@ Workers OAuth Provider v1 separates the authorization server from the resource s
 
 ## Production URL and resource identity
 
-The MCP resource URL must be the exact currently configured public URL, including `/mcp`. The issuer must be the exact public HTTPS origin of the auth Worker, without a trailing slash. Discover both from Cloudflare account/Worker configuration and verify with live read-only probes before committing production values. Do not infer the Worker subdomain or invent a custom domain.
-
-The resource URL, issuer, OAuth `resources` value, MCP `resourceMetadata.resource`, and client-discovered endpoint must match exactly.
+The verified production MCP resource URL is `https://syrianfatora-mcp.kinan-api.workers.dev/mcp`. The verified issuer is `https://syrianfatora-auth.kinan-api.workers.dev`. The resource URL, issuer, OAuth `resources` value, MCP `resourceMetadata.resource`, and client-discovered endpoint must match exactly. Live read-only probes and current Worker configuration confirm these identities; do not replace them with guessed subdomains or custom domains.
 
 ## Identity and tenancy
 
