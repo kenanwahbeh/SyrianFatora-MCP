@@ -10,12 +10,12 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 
 ## Production status — 2026-11-20
 
-**Status: Production OAuth infrastructure deployed; real Workspace-key verification remains NO-GO.**
+**Status: Production OAuth infrastructure deployed; read-only OAuth smoke completed successfully with two real Workspace keys. Further testing remains NO-GO pending the ordered release gates.**
 
 - Auth Worker: https://syrianfatora-auth.kinan-api.workers.dev — version #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`, deployment `34b83009-a63b-418b-ace6-a9365ad70cf3`.
 - Existing MCP Worker: https://syrianfatora-mcp.kinan-api.workers.dev/mcp — version #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2`, deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`.
 - OAuth issuer, authorization discovery, and protected-resource metadata are live; MCP health reports **51 tools**.
-- Production probes verified health, OAuth discovery, protected-resource metadata, and invalid bearer-token rejection (401). These probes did **not** prove an authenticated MCP tool call using a real Workspace key.
+- Production probes verified health, OAuth discovery, protected-resource metadata, and invalid bearer-token rejection (401). Separately, the operator confirmed successful production OAuth Authorization Code + PKCE smoke tests with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and the read-only `customers_list` call. No write operation was tested.
 - GitHub Actions: 41 Auth tests and 24 MCP tests pass on `main`; SQLite Durable Object concurrency and provider-directed 429 cooldown tests are covered.
 - `npm audit --audit-level=high` reports zero vulnerabilities; Cloudflare Build triggers run audit, build, and tests.
 - Both live production Build triggers deploy without `--force`; the flag is not configured in either automatic trigger.
@@ -23,7 +23,7 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 - **Preview cleanup completed:** PR #52 is merged; production `/oauth/client-metadata.json` returns 404 and the live MCP version has `IS_PREVIEW=false`. The isolated Preview Worker remains available.
 - **Rollback caution:** immediate MCP rollback version #9 predates the Preview cleanup and re-exposes the Preview client metadata endpoint.
 - **Confirmed OAuth lifecycle gap:** Auth v6 may issue refresh tokens even when optional `offline_access` was not approved; the correction is prepared in draft PR #54 and is not deployed.
-- **NO-GO:** do not enter a real Workspace key until the six ordered gates in [the implementation plan](docs/implementation-plan.md) are closed. No real-key token issuance/refresh or authenticated production tool call has been verified.
+- **NO-GO for further testing:** the two-key read-only smoke test is recorded as completed, but it does not close the ordered release gates. Token refresh/revocation lifecycle and user-facing disconnect/replacement behavior remain unresolved; do not run further real-key tests until gates 1–5 are formally closed.
 
 ## Agreed production architecture
 
