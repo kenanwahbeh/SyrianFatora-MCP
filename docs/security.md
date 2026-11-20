@@ -53,16 +53,18 @@ SyrianFatora response headers `X-RateLimit-Limit` and `X-RateLimit-Remaining`, t
 - Keep the production resource Worker name exactly `syrianfatora-mcp`.
 - Deploy the authorization Worker as a separate internal dependency; do not replace the MCP Worker with it.
 - Capture the exact live MCP script, settings, bindings, versions, and deployment metadata before any overwrite.
-- Never use `--force` solely to bypass a script API conflict without verifying the complete replacement artifact and rollback.
+- Never configure `--force` in an automatic CI or Cloudflare Build production trigger. A one-time migration exception requires separate explicit approval, a captured live baseline, a verified replacement artifact, and a documented rollback.
 - Never use a real production workspace for write-operation smoke tests.
 - Limit smoke tests to health, OAuth metadata/discovery, MCP initialize, tools/list, invalid-token rejection, and safe read-only upstream requests.
 - Set request size limits, no-store response headers for sensitive endpoints, and conservative CORS/Content Security Policy.
-- Verify the authorization-attempt abuse guard and provider-directed 429 cooldown bindings before production traffic is enabled. Do not add local request quotas to MCP traffic.
+- The authorization-attempt abuse guard and provider-directed 429 cooldown bindings are deployed and were verified in production; see the production migration log. Do not add local request quotas to MCP traffic.
 - Redact sensitive headers, query strings, and authorization form bodies in observability.
 
-## Testing exception
+## Testing and production evidence
 
-PR #14 adds focused Node tests for the Auth and MCP rate-limit clients. Both GitHub Actions workflows passed for code/test commit `23f6bb96483d40dcc3e332c4b8889dd884f20dda`: Auth run #74 and MCP run #59 each passed dependency installation, `npm run build:check`, and `npm test`. The tests mock the Durable Object namespace and do not prove SQLite atomicity or real concurrent consumption. These client tests mock the Durable Object namespace and do not prove SQLite transaction atomicity or real concurrent consumption. Direct Durable Object tests and production read-only configuration verification remain release gates. No production write-operation tests are allowed.
+The historical PR #14 test exception was superseded by the later SQLite-backed Durable Object test suite. On `main`, the Auth suite passes 41/41 tests, including concurrent authorization-attempt serialization; the MCP suite passes 21/21 tests. Both Cloudflare Build triggers run `npm audit --audit-level=high`, `npm run build:check`, and `node --test` before deployment. The current deployed Auth and MCP versions and their health/discovery probes are recorded in `docs/production-migration.md`.
+
+These tests and unauthenticated production probes do not establish a successful real Workspace-key OAuth flow or authenticated MCP tool call. That remains NO-GO until the ordered release gates are closed. No production write-operation tests are allowed.
 
 ## Incident response
 
@@ -72,4 +74,4 @@ If a key is exposed, revoke it in SyrianFatora, invalidate related OAuth grants,
 
 SyrianFatora's official developer documentation specifies a default daily quota of 1,000 requests per workspace, which can be increased on request. The documentation says requests, including 429 responses, are recorded in workspace usage/audit logs; this audit-log statement should not be interpreted as proof that every 429 consumes the daily allowance. Paid plans add a monthly quota tied to the billing cycle; the public documentation does not specify one universal monthly value. Responses expose X-RateLimit-Limit and X-RateLimit-Remaining, and 429 responses expose Retry-After. Source: https://syrianfatora.com/developers
 
-The implementation currently coordinates usage by keyed API-credential fingerprint. This strictly shares usage across OAuth grants using the same key, but it does not merge multiple distinct API keys belonging to one workspace. Since the upstream quota is workspace-wide, production rollout must either enforce one active API key per workspace or obtain a stable workspace identifier from SyrianFatora and key the shared quota by that identity. Monthly plan limits remain enforced by the upstream provider; local cooldown handling honors its 429 Retry-After.
+The implementation does not coordinate or meter workspace usage locally. The HMAC credential fingerprint is used only for authorization-attempt protection and provider-directed cooldown state; it does not merge distinct API keys into a workspace identity. No local workspace aggregation is needed because SyrianFatora remains the sole quota authority. Monthly plan limits remain provider-enforced, and local cooldown handling honors only a valid provider `Retry-After`.

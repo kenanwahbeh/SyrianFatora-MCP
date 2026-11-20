@@ -1,7 +1,8 @@
 # Rate-limiter audit — provider-owned workspace quota
 
-**Updated:** 2026-11-19  
-**Scope:** Auth authorization-attempt protection, MCP upstream requests, provider-directed cooldown behavior.  
+**Updated:** 2026-11-20
+
+**Scope:** Auth authorization-attempt protection, MCP upstream requests, provider-directed cooldown behavior.
 **Intent:** SyrianFatora owns workspace quota. This integration must not create a competing local request quota.
 
 ## Current behavior in source
@@ -45,10 +46,11 @@ RATE_LIMIT_HMAC_SECRET remains required for privacy-preserving credential/IP ide
 
 The source tests cover concurrent authorization-attempt protection in the SQLite Durable Object; credential-attempt protection without a second credential usage bucket; provider-directed cooldown behavior; MCP cooldown checks without grant fingerprints or local usage charges; missing secret/binding failure behavior; handler behavior when provider cooldown is active; and provider quota headers/upstream 429 handling.
 
-The revised tests and both package build workflows must pass before this branch is considered validated. These source tests do not imply a production deployment or live Cloudflare verification.
+On `main`, the Auth suite passes 41/41 and the MCP suite passes 21/21; the Cloudflare Build workflows run audit, build, and test gates. These source tests do not prove a real Workspace-key OAuth flow or authenticated MCP tool call; see the production migration log and the ordered release gates.
 
 ## Production safety
 
-- No production Worker, DNS, route, secret, binding, or deployment changes are part of this source-only change.
-- Do not deploy until the revised builds/tests pass and the existing independent production endpoint, binding, secret, migration, and rollback checks are complete.
+- The Auth and MCP Workers are deployed with the provider-owned quota model. Production binding/secret inventory and read-only endpoint checks are recorded in `docs/production-migration.md`.
+- The 2026-11-20 Auth release passed 41/41 tests; the current `main` MCP suite passes 21/21. The rate-limiter behavior is source-tested and the production bindings are verified.
+- Do not introduce local per-key, per-grant, daily, or monthly request quotas. Production write-operation tests remain prohibited.
 - Never test write operations against a real customer workspace.

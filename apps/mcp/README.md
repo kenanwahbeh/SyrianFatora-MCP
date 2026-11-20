@@ -9,8 +9,9 @@ This package is the OAuth-protected resource server for the existing production 
 - This is the existing MCP resource service, migrated in place.
 - Do not deploy a second MCP Worker as a replacement or use the Preview name in production.
 - Preserve the existing public MCP endpoint identity and all 51 tool definitions.
-- Current production version: `392a040a-eff8-421d-952b-0075dc74e703` (version 6).
-- Current deployment: `6fe36215-6e5d-4368-8744-ea90473b78c3`.
+- Current production version: `c83dc9c3-daf6-4f2e-961e-a792605c2ed7` (version 8).
+- Current deployment: `17e5289a-f676-49a6-b412-638f09b8776e` (100% traffic).
+- Immediate rollback version: `fce1bf08-2f1c-481b-a46c-1792420a3c2d` (version 7); deployment `76d7e407-4ced-4fd7-8a07-d49418943346`.
 - Previous rollback version captured before the migration: `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (version 4).
 - Production workers.dev route is enabled; public version-preview URLs are disabled.
 
@@ -91,10 +92,12 @@ Optional environment overrides:
 
 This is intentionally a local/manual production verification, not a GitHub Actions job: the operator must approve the OAuth request and enter the API key in the browser. Do not put the API key or access token in GitHub Secrets, command-line arguments, source control, or CI logs. A successful run prints a final `PASS` line; failures print only bounded status/error information, not response bodies.
 
+**Current main-branch limitation:** the local client-cache serialization fix and mocked OAuth/MCP integration harness are prepared in draft PR #51. Until that change is merged, repeated smoke runs may register another public test client instead of reusing the cached registration. The mock harness is not production OAuth evidence.
+
 ## Provider response headers
 
 The MCP response includes SyrianFatora's `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` values when present. Those provider values are authoritative. The MCP Worker does not calculate or replace workspace quota locally.
 
 ## Preview deployment
 
-The isolated Preview Worker is separate from production and remains pinned to the `test/durable-object-atomicity` branch. The production Build trigger targets `main` and deploys the existing `syrianfatora-mcp` Worker in place. Public version-preview URLs are disabled for production.
+The isolated Preview Worker is separate from production and remains pinned to the `test/durable-object-atomicity` branch. The production Build trigger targets `main` and deploys the existing `syrianfatora-mcp` Worker in place without `--force`. Public version-preview URLs are disabled for production. The current production `/oauth/client-metadata.json` response still exposes the Preview E2E test client; draft PR #52 gates that response to Preview only and has not been deployed.

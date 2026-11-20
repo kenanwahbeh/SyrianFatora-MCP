@@ -1,6 +1,6 @@
 # ADR 0001: Use Workers OAuth Provider v1 with split Workers
 
-- Status: Accepted for implementation
+- Status: Implemented and deployed
 - Date: 2026-11-17
 
 ## Context

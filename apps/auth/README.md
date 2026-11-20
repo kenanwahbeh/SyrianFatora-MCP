@@ -5,6 +5,8 @@ This is the separate OAuth 2.1 authorization server for the existing `syrianfato
 ## Production identity
 
 - Cloudflare Worker: `syrianfatora-auth`.
+- Current production version: #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`; deployment `34b83009-a63b-418b-ace6-a9365ad70cf3` (100% traffic).
+- Immediate rollback version: #5 `53dfd48f-5b83-49f9-bd8a-229255d82790`; deployment `d66496cb-7e13-48a4-8c4d-433c8dfd560d`.
 - Issuer: https://syrianfatora-auth.kinan-api.workers.dev.
 - Service Binding entrypoint: `SyrianFatoraAuth`.
 - The existing `syrianfatora-mcp` Worker calls it internally through `AUTH_SERVER`.
@@ -60,7 +62,7 @@ Do not add per-credential API request quotas or per-OAuth-grant request quotas. 
 - Credential replacement and disconnect/revocation UX are not implemented yet.
 - Live production smoke checks passed for `/health`, OAuth discovery, MCP protected-resource metadata, the MCP-to-Auth Service Binding, and rejection of an invalid bearer token with HTTP 401.
 - **Not yet verified:** token issuance and refresh using a real SyrianFatora workspace API key. Do not paste a real key into chat.
-- Auth CI: 40 tests pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown tests.
+- Auth CI on `main`: 41 tests pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown tests.
 - `npm audit --audit-level=high` currently reports zero vulnerabilities; the CI and Cloudflare Build pipelines enforce this gate.
 
 ## Shared guard and secrets
