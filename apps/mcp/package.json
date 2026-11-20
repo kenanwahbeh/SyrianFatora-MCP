@@ -9,7 +9,8 @@
     "build": "cf build",
     "build:check": "cf build",
     "deploy:preview": "./node_modules/.bin/cf previews deploy",
-    "test": "node --test"
+    "test": "node --test",
+    "smoke:oauth": "node ../../scripts/production-oauth-smoke.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4"
