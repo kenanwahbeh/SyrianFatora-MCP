@@ -33,6 +33,9 @@ const resourceServer = new OAuthResourceServer({
         onUpstreamFailure: (diagnostic) => {
           console.error(JSON.stringify(diagnostic));
         },
+        onUpstreamRedirect: (diagnostic) => {
+          console.error(JSON.stringify(diagnostic));
+        },
       });
     },
   },

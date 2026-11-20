@@ -114,6 +114,25 @@ function safeDiagnosticValue(value) {
   return /^[A-Za-z0-9_.-]{1,64}$/.test(normalized) ? normalized : undefined;
 }
 
+function classifyFetchErrorMessage(message) {
+  if (typeof message !== "string") return "unknown";
+  if (/^fetch failed$/i.test(message.trim())) return "fetch_failed";
+  if (/redirect/i.test(message)) return "redirect_error";
+  if (/invalid url|failed to parse url/i.test(message)) return "invalid_url";
+  if (/dns|socket|network|connection|tls|certificate/i.test(message)) return "network_error";
+  return "unknown";
+}
+
+function safeRedirectHost(location, requestUrl) {
+  if (typeof location !== "string" || !location) return undefined;
+  try {
+    const host = new URL(location, requestUrl).hostname.toLowerCase();
+    return /^[a-z0-9.-]{1,253}$/.test(host) ? host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function readBoundedBody(stream, maxBytes) {
   if (!stream) return "";
   const reader = stream.getReader();
@@ -172,6 +191,7 @@ export async function handleMcpRequest(request, props, {
   checkUpstreamCooldown,
   onUpstreamRateLimited,
   onUpstreamFailure,
+  onUpstreamRedirect,
   maxRequestBytes = 1_048_576,
   upstreamTimeoutMs = 10_000,
   allowedOrigins = "",
@@ -350,11 +370,25 @@ export async function handleMcpRequest(request, props, {
     const upstream = await fetchImpl(target.toString(), {
       method,
       headers,
-      redirect: "error",
+      redirect: "manual",
       signal,
       ...(body !== undefined ? { body } : {}),
     });
     upstreamFailurePhase = "read_response_body";
+    if (upstream.status >= 300 && upstream.status < 400) {
+      try {
+        if (typeof onUpstreamRedirect === "function") {
+          onUpstreamRedirect({
+            event: "mcp.upstream_redirect",
+            tool: tool.name,
+            status: upstream.status,
+            locationHost: safeRedirectHost(upstream.headers.get("Location"), target),
+          });
+        }
+      } catch {
+        // Redirect diagnostics must never change the upstream response.
+      }
+    }
     if (upstream.status === 429) {
       if (typeof onUpstreamRateLimited !== "function") {
         return rpcError(id, -32000, "SyrianFatora rate-limited this workspace; cooldown could not be recorded.", 503);
@@ -396,6 +430,7 @@ export async function handleMcpRequest(request, props, {
       tool: tool.name,
       phase: upstreamFailurePhase,
       errorName: safeDiagnosticValue(error?.name),
+      errorMessageKind: classifyFetchErrorMessage(error?.message),
       errorCode: safeDiagnosticValue(error?.code),
       causeName: safeDiagnosticValue(cause?.name),
       causeCode: safeDiagnosticValue(cause?.code),

@@ -362,3 +362,11 @@ The Cloudflare deployment inspection confirms version assignment and traffic per
 - No existing workspace records were created, updated, or deleted. No secrets, bindings, DNS, or Worker settings were changed. No additional live-key request has been run after this probe.
 
 **Next diagnostic step:** add a narrowly allowlisted `errorMessageKind` classification (never raw exception text), and optionally capture a redirect response status with `redirect: "manual"` on a separately approved single read. Do not change redirect handling in production until the response behavior is established.
+
+
+### Second-round MCP transport diagnostics — 2026-11-21
+
+- Added an allowlisted `errorMessageKind` classifier (`fetch_failed`, `redirect_error`, `invalid_url`, `network_error`, or `unknown`). Raw exception text is never emitted.
+- Changed the upstream fetch to `redirect: "manual"` for this diagnostic build so a redirect is returned as a 3xx response rather than silently followed or rejected. The tool result exposes only the HTTP status and bounded response body; the diagnostic event records only the status and a validated destination hostname, never the Location URL or query string.
+- Added regression tests for message classification, redirect handling, and the absence of secret/query leakage.
+- This second-round diagnostic build is intended for one read-only `KEY_1` probe. No write test, other key, secret, binding, DNS, or Durable Object setting is in scope.

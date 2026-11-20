@@ -343,6 +343,7 @@ test("reports sanitized upstream transport diagnostics without exposing exceptio
     tool: "customers_list",
     phase: "fetch",
     errorName: "TypeError",
+    errorMessageKind: "network_error",
     errorCode: undefined,
     causeName: "Error",
     causeCode: "ECONNRESET",
@@ -351,6 +352,49 @@ test("reports sanitized upstream transport diagnostics without exposing exceptio
   });
   assert.equal(JSON.stringify(diagnostic).includes(apiKey), false);
   assert.equal(JSON.stringify(diagnostic).includes("private URL"), false);
+});
+
+test("classifies generic fetch failures without exposing exception text", async () => {
+  let diagnostic;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list", arguments: {},
+  }), props, {
+    checkUpstreamCooldown: async () => ({ allowed: true }),
+    onUpstreamFailure: (event) => { diagnostic = event; },
+    fetchImpl: async () => { throw new TypeError("fetch failed: private query=secret"); },
+  });
+  assert.equal((await json(response)).result.isError, true);
+  assert.equal(diagnostic.errorMessageKind, "unknown");
+  assert.equal(JSON.stringify(diagnostic).includes("private query"), false);
+});
+
+test("uses manual redirects for one-hop upstream diagnosis and logs only safe redirect metadata", async () => {
+  let observedOptions;
+  let redirectDiagnostic;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list", arguments: {},
+  }), props, {
+    checkUpstreamCooldown: async () => ({ allowed: true }),
+    onUpstreamRedirect: (event) => { redirectDiagnostic = event; },
+    fetchImpl: async (_url, options) => {
+      observedOptions = options;
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://www.syrianfatora.com/login?token=private" },
+      });
+    },
+  });
+  const body = await json(response);
+  assert.equal(observedOptions.redirect, "manual");
+  assert.equal(body.result.isError, true);
+  assert.equal(JSON.parse(body.result.content[0].text).status, 302);
+  assert.deepEqual(redirectDiagnostic, {
+    event: "mcp.upstream_redirect",
+    tool: "customers_list",
+    status: 302,
+    locationHost: "www.syrianfatora.com",
+  });
+  assert.equal(JSON.stringify(redirectDiagnostic).includes("private"), false);
 });
 
 test("fails closed when no upstream cooldown guard is provided", async () => {
