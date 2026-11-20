@@ -11,6 +11,9 @@ The OAuth-protected MCP resource server for SyrianFatora. It preserves the exist
 - Requires both `mcp:read` and `mcp:write` for create, update, and delete operations.
 - Preserves existing tool request/response semantics, including the payment-void reason requirement.
 - Applies bounded request handling and avoids returning the upstream API key in echoed responses.
+- Validates tool-call arguments against each published `inputSchema` before forwarding a request.
+- Validates browser `Origin` headers on `/mcp`; requests without `Origin` remain supported for non-browser MCP clients.
+- Negotiates only the supported MCP protocol versions (`2025-03-26` and `2024-11-05`) and rejects unsupported version headers.
 
 ## Production identity
 
@@ -26,6 +29,12 @@ Do not rename this Worker, create a replacement MCP service, or point production
 SyrianFatora owns workspace API quota. The MCP Worker does not impose local per-key, per-grant, daily, or monthly request quotas and does not count normal MCP requests locally.
 
 A credential-scoped cooldown is stored only when SyrianFatora returns HTTP 429 with a valid `Retry-After` value. The provider-specified duration is used without a local fallback. The Worker does not automatically retry upstream requests. The HMAC credential fingerprint is not a workspace identifier or usage counter.
+
+## Browser Origin allowlist
+
+The MCP endpoint accepts requests with no `Origin` header for non-browser clients. If a browser client sends `Origin`, the value must exactly match the MCP endpoint origin or an entry in the optional `MCP_ALLOWED_ORIGINS` Worker variable.
+
+Set `MCP_ALLOWED_ORIGINS` to a comma-separated list of exact origins, including scheme and port where applicable (for example, `https://chat.example.com,https://app.example.com`). Paths, wildcards, opaque `null` origins, and non-canonical values are rejected. Determine the actual browser-client origin before configuring it; do not guess or broadly allow all origins. No production Worker variable or deployment is changed by this source change.
 
 ## Development
 
