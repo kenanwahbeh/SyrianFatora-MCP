@@ -348,3 +348,17 @@ The Cloudflare deployment inspection confirms version assignment and traffic per
 - Added a regression test proving a transport cause code is retained while a synthetic secret and private URL in the exception message are not logged.
 - Validation: MCP tests 43/43 passed; `npm run build:check` succeeded; `git diff --check` succeeded.
 - This instrumentation exists only on the uncommitted test branch. It has not been deployed. Production logs will not contain this new diagnostic until a separately approved deployment is made.
+
+## Sanitized MCP transport diagnostic deployment and KEY_1 probe — 2026-11-21
+
+- Branch: `test/live-mcp-real-keys`; source commit at deployment: `2fc2cc9c9249350a69a7c58fdeff814d6aab1e84`.
+- MCP Worker version #14: `5367ee50-0746-4091-b5aa-b342bef7611e`.
+- Deployment: `c54db451-c2a3-44a8-9fe7-689811b7383d`; verified 100% traffic on version #14.
+- The upload preserved the existing `secret_text` binding via Cloudflare's keep-bindings mechanism. The secret value was not read or changed. Existing service and Durable Object bindings were also preserved.
+- A single controlled read-only MCP request was made with `KEY_1`: `customers_list`. OAuth authorization, token validation, MCP initialization, and tool discovery succeeded; the tool call returned the existing generic upstream failure. No other key was used and no write operation was attempted.
+- The new structured event was captured at `2026-11-20T22:33:23.689Z` UTC for `customers_list`, from version #14. It reports `phase=fetch`, `errorName=TypeError`, `durationMs=0`, and no safe `errorCode`, `causeName`, or `causeCode` fields. The failure therefore occurred while initiating the upstream fetch, before a response was received or its body was read. It is not an upstream HTTP status such as 401/403/429/500.
+- The request path is constructed against `https://syrianfatora.com/api/public/v1`; the fetch currently uses `redirect: "error"`. A redirect rejection remains one possible explanation, but the captured telemetry does not prove that. DNS, connection, TLS, URL, and redirect causes are not yet distinguished.
+- Follow-up script option `npm run test:live-keys -- --key KEY_1` was added and pushed in commit `3c49c42`; it runs only one read-only key and cannot reach the KEY_3 write test.
+- No existing workspace records were created, updated, or deleted. No secrets, bindings, DNS, or Worker settings were changed. No additional live-key request has been run after this probe.
+
+**Next diagnostic step:** add a narrowly allowlisted `errorMessageKind` classification (never raw exception text), and optionally capture a redirect response status with `redirect: "manual"` on a separately approved single read. Do not change redirect handling in production until the response behavior is established.
