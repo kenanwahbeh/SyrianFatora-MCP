@@ -30,6 +30,9 @@ const resourceServer = new OAuthResourceServer({
         checkUpstreamCooldown: () => checkUpstreamCooldown(workerEnv, ctx.props),
         onUpstreamRateLimited: (retryAfter) =>
           recordProviderCooldown(workerEnv, ctx.props, retryAfter),
+        onUpstreamFailure: (diagnostic) => {
+          console.error(JSON.stringify(diagnostic));
+        },
       });
     },
   },

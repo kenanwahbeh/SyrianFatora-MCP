@@ -10,7 +10,8 @@
     "build:check": "cf build",
     "deploy:preview": "./node_modules/.bin/cf previews deploy",
     "test": "node --test",
-    "smoke:oauth": "node ../../scripts/production-oauth-smoke.mjs"
+    "smoke:oauth": "node ../../scripts/production-oauth-smoke.mjs",
+    "test:live-keys": "node ../../scripts/live-mcp-key-test.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4"

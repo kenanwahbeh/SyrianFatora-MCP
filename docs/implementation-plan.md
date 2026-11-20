@@ -1,8 +1,8 @@
-# Implementation status and pre-Workspace release gates
+# Implementation status and controlled live-test gates
 
-**Last updated:** 2026-11-20
+**Last updated:** 2026-11-21
 
-**Release status:** **NO-GO** for further real-key testing until gates 1–5 are formally closed and reviewed. The Auth v8 lifecycle correction is deployed; gate 5 remains open only for client-side disconnect verification and user-facing credential replacement.
+**Testing decision (2026-11-21): GO** for controlled real-key MCP integration tests against the operator-designated test workspace. This is not a full release-readiness sign-off. The Auth v8 lifecycle correction is deployed; client-side disconnect verification and user-facing credential replacement remain open.
 **Source of truth for deployed IDs and production probes:** [production migration runbook](production-migration.md).
 
 ## Deployed production baseline
@@ -35,7 +35,7 @@ Production health, OAuth discovery, protected-resource metadata, MCP tool count,
 
 ## Ordered pre-Workspace gates
 
-Complete these gates in this exact order. The historical two-key smoke is documented below; do not perform additional real-key tests out of sequence.
+These implementation and release-readiness gates remain tracked in order. The operator's 2026-11-21 GO decision separately authorizes controlled MCP integration tests against the designated test workspace while the remaining product-release work continues.
 
 ### 1. Deployment gate — remove automatic `--force`
 
@@ -53,7 +53,7 @@ Complete these gates in this exact order. The historical two-key smoke is docume
 - [x] A local mocked integration test exercises registration, state, PKCE, session handling, tool discovery, and the read-only tool call without a real key or production request.
 - [x] Confirmed that the script and mock test are implementation evidence only; separately, a real production OAuth smoke was later run successfully with two real Workspace keys (`KEY_1` and `KEY_2`).
 - [x] Merge the smoke cache fix and local integration harness in PR #51; the MCP suite on `main` now includes the local mock OAuth/MCP flow test.
-**Historical execution note:** The real production OAuth smoke was subsequently run successfully with `KEY_1` and `KEY_2` before gates 1–5 were all formally closed. Record this as completed read-only test evidence, not as permission to continue testing out of sequence. Any further real-key testing remains blocked until gates 1–5 are closed and reviewed.
+**Historical execution note:** The real production OAuth smoke was run successfully with `KEY_1` and `KEY_2`. On 2026-11-21, the operator explicitly changed the testing decision to GO for controlled MCP tests against the designated test workspace. This permission does not close the remaining release-readiness gates.
 
 **Evidence:** PR #51 merged to `main`; MCP tests pass 24/24. The local mock test is not production OAuth evidence.
 
@@ -85,23 +85,25 @@ Complete these gates in this exact order. The historical two-key smoke is docume
 
 **Evidence:** [PR #54](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/54) is merged. Cloudflare Auth v8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532`, deployment `4bd65dcd-240e-44f7-b2db-c025a0b51a05` (100% traffic). The deployment was created automatically after the merge; this documentation task did not deploy or modify Workers.
 
-### 6. Real OAuth test — read-only only
+### 6. Controlled real OAuth test — read and scoped write
 
 **Historical evidence:** The operator confirmed that the production OAuth Authorization Code + PKCE flow was successfully completed with two real Workspace keys (`KEY_1` and `KEY_2`). Each authorization used `mcp:read` only and completed authenticated MCP `initialize`, `notifications/initialized`, `tools/list`, and `customers_list` with `per_page=1`. No write operation was run and no key value or customer record is retained in this repository.
 
-This test occurred before gates 1–5 were all formally closed. It is recorded accurately as historical evidence, but does not waive the agreed order or authorize additional real-key tests. Further testing may start only after gates 1–5 are closed and reviewed.
+This historical read-only test is retained as evidence. The operator subsequently authorized controlled live MCP testing against the designated test workspace on 2026-11-21. The authorization is limited to the test procedure below and does not imply full release readiness.
 
 - [x] For the completed smoke, the user entered each real Workspace API key only on the first-party HTTPS Auth authorization page; no key value was copied into chat, a shell command, GitHub, or logs.
 - [x] Approved only `mcp:read` for both key sessions.
 - [x] Completed OAuth Authorization Code + PKCE and verified access-token issuance for both sessions. **Refresh-token lifecycle was not established by this smoke.**
 - [x] Executed authenticated `initialize`, `notifications/initialized`, `tools/list`, and `customers_list` with `per_page=1` for both sessions.
 - [x] The smoke test did not print or persist API keys, access tokens, or returned customer records.
-- [ ] Do not run create, update, or delete operations against a real Workspace.
+- [x] Add `scripts/live-mcp-key-test.mjs` and `npm run test:live-keys`: `KEY_1`/`KEY_2` read-only checks and a `KEY_3` temporary item create/update/get/delete lifecycle through MCP only. The runner revokes temporary OAuth grants and never prints credentials or customer records.
+- [ ] Complete the live run and record its outcome. A failed run must not be described as a passed integration test.
 
 ## Global stop conditions
 
-- No additional real Workspace-key test before gates 1–5 are formally closed, notwithstanding the historical two-key smoke recorded above.
-- No production write operations.
+- Live-key testing is restricted to the operator-designated test workspace and the documented `test:live-keys` procedure.
+- Write operations may affect only the uniquely marked item created by the test runner; never modify or delete pre-existing records.
+- Do not run broad write tests, payment operations, invoice publication, or operations against other workspaces.
 - No merge or production deployment without separate explicit approval.
 - No deletion of Preview Workers, Preview environments, or related resources as part of interface cleanup.
 - Never persist `--force` in automatic CI or Cloudflare Build production triggers.

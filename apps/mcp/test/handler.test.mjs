@@ -320,6 +320,39 @@ test("does not reveal upstream fetch exceptions or credentials", async () => {
 });
 
 
+test("reports sanitized upstream transport diagnostics without exposing exception messages", async () => {
+  let diagnostic;
+  const secretMessage = `socket failed while sending ${apiKey} to a private URL`;
+  const transportError = new TypeError(secretMessage, {
+    cause: Object.assign(new Error(secretMessage), { code: "ECONNRESET" }),
+  });
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: {},
+  }), props, {
+    checkUpstreamCooldown: async () => ({ allowed: true }),
+    onUpstreamFailure: (event) => { diagnostic = event; },
+    fetchImpl: async () => { throw transportError; },
+  });
+  const body = await json(response);
+
+  assert.equal(body.result.isError, true);
+  assert.equal(body.result.content[0].text, "SyrianFatora API request failed. Please retry later.");
+  assert.deepEqual(diagnostic, {
+    event: "mcp.upstream_failure",
+    tool: "customers_list",
+    phase: "fetch",
+    errorName: "TypeError",
+    errorCode: undefined,
+    causeName: "Error",
+    causeCode: "ECONNRESET",
+    timeoutMs: 10_000,
+    durationMs: diagnostic.durationMs,
+  });
+  assert.equal(JSON.stringify(diagnostic).includes(apiKey), false);
+  assert.equal(JSON.stringify(diagnostic).includes("private URL"), false);
+});
+
 test("fails closed when no upstream cooldown guard is provided", async () => {
   let called = false;
   const response = await handleMcpRequest(rpc("tools/call", {

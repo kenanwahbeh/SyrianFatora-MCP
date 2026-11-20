@@ -108,6 +108,12 @@ function toolError(id, message) {
   });
 }
 
+function safeDiagnosticValue(value) {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+  const normalized = String(value);
+  return /^[A-Za-z0-9_.-]{1,64}$/.test(normalized) ? normalized : undefined;
+}
+
 async function readBoundedBody(stream, maxBytes) {
   if (!stream) return "";
   const reader = stream.getReader();
@@ -165,6 +171,7 @@ export async function handleMcpRequest(request, props, {
   serverVersion = "1.2.0",
   checkUpstreamCooldown,
   onUpstreamRateLimited,
+  onUpstreamFailure,
   maxRequestBytes = 1_048_576,
   upstreamTimeoutMs = 10_000,
   allowedOrigins = "",
@@ -328,6 +335,8 @@ export async function handleMcpRequest(request, props, {
     return rpcError(id, -32000, "SyrianFatora cooldown status is temporarily unavailable.", 503);
   }
 
+  let upstreamFailurePhase = "fetch";
+  const upstreamStartedAt = Date.now();
   try {
     if (!Number.isSafeInteger(upstreamTimeoutMs) || upstreamTimeoutMs <= 0) {
       return rpcError(id, -32000, "Upstream request timeout is not configured safely.", 503);
@@ -345,6 +354,7 @@ export async function handleMcpRequest(request, props, {
       signal,
       ...(body !== undefined ? { body } : {}),
     });
+    upstreamFailurePhase = "read_response_body";
     if (upstream.status === 429) {
       if (typeof onUpstreamRateLimited !== "function") {
         return rpcError(id, -32000, "SyrianFatora rate-limited this workspace; cooldown could not be recorded.", 503);
@@ -380,6 +390,23 @@ export async function handleMcpRequest(request, props, {
       isError: !upstream.ok,
     });
   } catch (error) {
+    const cause = error && typeof error === "object" ? error.cause : undefined;
+    const diagnostic = {
+      event: "mcp.upstream_failure",
+      tool: tool.name,
+      phase: upstreamFailurePhase,
+      errorName: safeDiagnosticValue(error?.name),
+      errorCode: safeDiagnosticValue(error?.code),
+      causeName: safeDiagnosticValue(cause?.name),
+      causeCode: safeDiagnosticValue(cause?.code),
+      timeoutMs: upstreamTimeoutMs,
+      durationMs: Math.max(0, Date.now() - upstreamStartedAt),
+    };
+    try {
+      if (typeof onUpstreamFailure === "function") onUpstreamFailure(diagnostic);
+    } catch {
+      // Diagnostics must never change the upstream error response.
+    }
     if (error?.name === "TimeoutError" || error?.name === "AbortError") {
       return toolError(id, "SyrianFatora API request timed out. Please retry later.");
     }
