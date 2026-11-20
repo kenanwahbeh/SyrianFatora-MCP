@@ -25,6 +25,7 @@ const TEST_KEYS = [
   "sk_test_runtime_only_key_123456",
   "sk_test_runtime_second_key_654321",
 ];
+const INVALID_TEST_KEY = "sk_test_runtime_invalid_key_000000";
 const REDIRECT_URI = "http://localhost:8787/callback";
 const CIMD_URL = "https://syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/oauth/client-metadata.json";
 
@@ -116,6 +117,15 @@ before(async () => {
           }, {
             headers: { "Cache-Control": "no-store" },
           });
+        }
+        if (
+          request.method === "GET" &&
+          url.origin === "https://syrianfatora.com" &&
+          url.pathname === "/api/public/v1/customers" &&
+          url.search === "?per_page=1" &&
+          authorization === `Bearer ${INVALID_TEST_KEY}`
+        ) {
+          return new Response(null, { status: 401 });
         }
         if (
           request.method === "GET" &&
@@ -422,6 +432,53 @@ test("approval validates a synthetic key through the isolated outbound mock and 
   assert.equal(typeof tokens.access_token, "string");
   assert.match(tokens.token_type, /^bearer$/i);
   assert.ok(tokens.expires_in > 0);
+});
+
+test("invalid API key re-renders consent with a fresh handle and allows retry", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-invalid-key-retry-verifier-long-enough";
+  const initial = await beginAuthorization(client, verifier);
+  const invalidBody = new URLSearchParams({
+    handle: initial.handle,
+    decision: "approve",
+    api_key: INVALID_TEST_KEY,
+    scope: "mcp:read",
+  });
+  const failed = await request("/authorize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "CF-Connecting-IP": "192.0.2.12",
+      Cookie: initial.cookie,
+    },
+    body: invalidBody,
+  });
+  assert.equal(failed.status, 400);
+  const failedHtml = await failed.text();
+  assert.match(failedHtml, /The API key was rejected/);
+  const retryHandle = failedHtml.match(/name="handle" value="([^"]+)"/)?.[1];
+  assert.ok(retryHandle, "failed validation must issue a new consent handle");
+  assert.notEqual(retryHandle, initial.handle, "retry must not reuse the consumed handle");
+  const retryCookie = (failed.headers.get("Set-Cookie") || "").split(";")[0];
+  assert.ok(retryCookie, "retry must issue a new browser-binding cookie");
+
+  const validBody = new URLSearchParams({
+    handle: retryHandle,
+    decision: "approve",
+    api_key: TEST_KEYS[0],
+    scope: "mcp:read",
+  });
+  const retried = await request("/authorize", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "CF-Connecting-IP": "192.0.2.12",
+      Cookie: retryCookie,
+    },
+    body: validBody,
+  });
+  assert.equal(retried.status, 302, await retried.clone().text());
+  assert.ok(retried.headers.get("Location"), "successful retry must redirect to the OAuth client");
 });
 
 test("token endpoint rejects a mismatched PKCE verifier", async () => {

@@ -52,7 +52,7 @@ function errorPage(message) {
 </html>`;
 }
 
-function authorizationPage(details, handle) {
+function authorizationPage(details, handle, errorMessage = "") {
   const clientName = escapeHtml(details.clientName);
   const clientDomain = details.clientDomain
     ? `Published by <strong>${escapeHtml(details.clientDomain)}</strong>.`
@@ -72,6 +72,7 @@ function authorizationPage(details, handle) {
 <body>
   <main>
     <h1>Connect your SyrianFatora workspace</h1>
+    ${errorMessage ? `<p role="alert">${escapeHtml(errorMessage)}</p>` : ""}
     <p>Client: <strong>${clientName}</strong>. ${clientDomain}</p>
     <p>OAuth access will be sent to <strong>${escapeHtml(details.redirectHost)}</strong>.</p>
     ${localWarning}
@@ -120,9 +121,9 @@ async function authorize(request, workerEnv) {
     return new Response(null, { status: 302, headers });
   }
 
-  // Validate the user's selection and upstream credential before consuming the
-  // one-time, browser-bound consent handle. A retry can then correct a bad key
-  // or scope selection without restarting the entire OAuth request.
+  // Validate the user's scope selection before consuming the one-time handle.
+  // Credential checks run only after the browser-bound transaction is verified;
+  // if they fail, a fresh bound handle is issued so the user can safely retry.
   const selectedScopes = validateConsentScopes(
     form.getAll("scope").map(String),
     SUPPORTED_SCOPES,
@@ -136,8 +137,32 @@ async function authorize(request, workerEnv) {
   });
 
   const apiKey = String(form.get("api_key") ?? "").trim();
-  await enforceAuthorizationAbuseProtection(request, apiKey, workerEnv);
-  await validateSyrianFatoraKey(apiKey);
+  try {
+    await enforceAuthorizationAbuseProtection(request, apiKey, workerEnv);
+    await validateSyrianFatoraKey(apiKey);
+  } catch (error) {
+    if (!(error instanceof AuthorizationAbuseError) && !(error instanceof CredentialValidationError)) {
+      throw error;
+    }
+
+    // approveConsent() has securely consumed the previous one-time handle. If
+    // validation fails, issue a fresh browser-bound handle for the same already
+    // validated OAuth request so the user can correct the key without restarting.
+    const details = await oauth.describeConsent(approved.request);
+    const retry = await oauth.beginConsent(approved.request);
+    const message = error instanceof AuthorizationAbuseError
+      ? (error.status === 429
+        ? "Too many authorization attempts. Wait before trying again."
+        : "Authorization is temporarily unavailable. Please try again later.")
+      : error.message;
+    const headers = securityHeaders(retry.headers);
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    if (error.retryAfterSeconds) headers.set("Retry-After", String(error.retryAfterSeconds));
+    return new Response(authorizationPage(details, retry.handle, message), {
+      status: error.status ?? 400,
+      headers,
+    });
+  }
 
   // The provider encrypts props at rest and returns them only to the resource server.
   // This random subject identifies this grant; it is not an upstream account identifier.
