@@ -64,6 +64,33 @@ The credential HMAC fingerprint is used only to scope authorization anti-abuse a
 - **Not yet verified:** successful authenticated `initialize` and `tools/list` using a token issued after validating a real SyrianFatora workspace API key. Do not paste a real key into chat.
 - Never use a production workspace for write-operation tests.
 
+## Authenticated production OAuth smoke test
+
+The repository includes a separate, operator-run end-to-end smoke test. It completes a real OAuth Authorization Code + PKCE flow against the deployed Auth Worker, receives the callback on a temporary loopback HTTP listener, exchanges the code for an access token, and uses that token against the deployed MCP Worker.
+
+Run it from this package directory with Node.js 20 or later:
+
+```bash
+npm run smoke:oauth
+```
+
+The script:
+1. Registers a public OAuth test client with the exact temporary loopback redirect URI.
+2. Prints an authorization URL. Open it in a browser and enter the SyrianFatora API key only on the official HTTPS Auth Worker page; approve only `mcp:read`.
+3. Captures the OAuth callback locally, validates `state`, and exchanges the authorization code using the PKCE verifier.
+4. Calls authenticated MCP `initialize`, `notifications/initialized`, and `tools/list`; verifies the 51-tool catalogue.
+5. Calls only `customers_list` with `per_page=1` and verifies a successful upstream HTTP response.
+
+The test never requests `mcp:write`, never performs create/update/delete operations, and does not print or persist the access token, API key, or returned customer records. The API-key validation step in the Auth Worker and the final customer-list call both consume the provider's read quota. The script uses a fixed loopback port (`43127` by default) and caches only the public OAuth client ID and redirect URI in `~/.syrianfatora-smoke/client.json` (file mode `0600`); it does not cache tokens or API keys. It reuses that registration for up to 80 days and then creates a replacement. Each registration remains in Auth Worker KV until its configured TTL expires (currently 90 days); there is no client-unregistration endpoint in this integration. Override the callback port with `SMOKE_CALLBACK_PORT` or the local cache path with `SMOKE_CLIENT_CACHE` if needed.
+
+Optional environment overrides:
+- `AUTH_ORIGIN`: deployed authorization-server origin.
+- `MCP_ORIGIN`: deployed MCP resource-server origin.
+- `SMOKE_CALLBACK_PORT`: local callback port (default `43127`).
+- `SMOKE_CLIENT_CACHE`: local path for the non-secret OAuth client cache.
+
+This is intentionally a local/manual production verification, not a GitHub Actions job: the operator must approve the OAuth request and enter the API key in the browser. Do not put the API key or access token in GitHub Secrets, command-line arguments, source control, or CI logs. A successful run prints a final `PASS` line; failures print only bounded status/error information, not response bodies.
+
 ## Provider response headers
 
 The MCP response includes SyrianFatora's `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` values when present. Those provider values are authoritative. The MCP Worker does not calculate or replace workspace quota locally.

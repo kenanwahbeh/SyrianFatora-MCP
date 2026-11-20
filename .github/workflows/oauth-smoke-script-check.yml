@@ -1,0 +1,37 @@
+name: Authenticated OAuth smoke script validation
+
+on:
+  pull_request:
+    paths:
+      - "scripts/production-oauth-smoke.mjs"
+      - "apps/mcp/package.json"
+      - "apps/mcp/README.md"
+      - ".github/workflows/oauth-smoke-script-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/production-oauth-smoke.mjs"
+      - "apps/mcp/package.json"
+      - "apps/mcp/README.md"
+      - ".github/workflows/oauth-smoke-script-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-smoke-script:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Validate script syntax and package command
+        working-directory: apps/mcp
+        run: |
+          node --check ../../scripts/production-oauth-smoke.mjs
+          node -e "const p = require('./package.json'); if (p.scripts['smoke:oauth'] !== 'node ../../scripts/production-oauth-smoke.mjs') process.exit(1)"
