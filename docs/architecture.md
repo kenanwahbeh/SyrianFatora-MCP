@@ -3,7 +3,7 @@
 ## Decision: preserve the existing MCP Worker and split OAuth authorization
 
 **Decision date:** 2026-11-18  
-**Status:** Implemented and deployed. Real Workspace-key OAuth end-to-end verification remains outstanding; release readiness is NO-GO.
+**Status:** Implemented and deployed. A production read-only OAuth smoke was completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`). Further testing remains NO-GO until the ordered release gates are formally closed; refresh/revocation lifecycle and disconnect/replacement UX remain outstanding.
 
 Migrate the existing production MCP resource Worker **in place**. Its Cloudflare service name remains exactly `syrianfatora-mcp`; its existing public MCP endpoint identity and 51-tool catalogue are to be preserved. Do not create a replacement MCP resource Worker.
 
