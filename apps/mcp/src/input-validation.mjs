@@ -23,7 +23,16 @@ function validateValue(value, schema, path) {
   }
   if (typeof value === "number") {
     if (schema.minimum !== undefined && value < schema.minimum) return `${path} is below the minimum.`;
+    if (typeof schema.exclusiveMinimum === "number" && value <= schema.exclusiveMinimum) return `${path} must be greater than the minimum.`;
+    if (schema.exclusiveMinimum === true && schema.minimum !== undefined && value <= schema.minimum) return `${path} must be greater than the minimum.`;
     if (schema.maximum !== undefined && value > schema.maximum) return `${path} exceeds the maximum.`;
+    if (schema.exclusiveMaximum === true && schema.maximum !== undefined && value >= schema.maximum) return `${path} must be less than the maximum.`;
+  }
+  if (typeof value === "string" && schema.format === "date") {
+    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(value)
+      && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+      && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+    if (!validDate) return `${path} must be a valid YYYY-MM-DD date.`;
   }
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) return `${path} has too few items.`;

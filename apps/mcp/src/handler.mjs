@@ -1,5 +1,6 @@
 import { validateToolArguments } from "./input-validation.mjs";
 import { isAllowedMcpOrigin } from "./origin-validation.mjs";
+import { RESOURCE_CONTRACTS, describeRestTool } from "./rest-contract.mjs";
 
 const BASE = "https://syrianfatora.com/api/public/v1";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"];
@@ -22,13 +23,13 @@ const RESOURCES = {
 const GUIDANCE = {
   customers: "Customer records. Use only documented SyrianFatora customer fields.",
   invoices: "Sales invoices. Supply customer and line-item details (quantities, unit prices and applicable tax data). Never send calculated totals; SyrianFatora calculates invoice totals.",
-  items: "Products or services. Use exact documented item fields and decimal strings for monetary values.",
+  items: "Products or services. Use exact documented item fields; monetary input fields are JSON numbers and monetary response values are fixed-precision decimal strings.",
   quotes: "Sales quotations. Supply line-item details; do not send calculated totals.",
-  "credit-notes": "Credit notes. Use documented invoice/customer references and line-item details.",
-  payments: "Payment records. Use documented invoice/customer reference, amount, currency and payment-method fields.",
+  "credit-notes": "Credit notes. Use only documented customer_id, currency, amount, reason, issued_at and notes fields; do not add invoice_id or line items.",
+  payments: "Payment records. Use documented invoice_id, amount, currency, paid_at, method, optional exchange_rate and note fields.",
   "payment-methods": "Available payment methods. Read-only lookup.",
   "recurring-invoices": "Recurring invoice schedules. Use documented schedule and line-item fields; do not send calculated totals.",
-  expenses: "Business expenses. Use documented supplier/category references, date, description and amount fields.",
+  expenses: "Business expenses. Use documented title, category_id, optional supplier_id, bill_date, currency, amount and other documented expense fields.",
   suppliers: "Supplier records. Use only documented SyrianFatora supplier fields.",
   "expense-categories": "Expense category records. Use only documented category fields.",
   "exchange-rates": "Exchange-rate records. Preserve currency codes and decimal precision exactly as documented.",
@@ -36,12 +37,17 @@ const GUIDANCE = {
 
 function describe(resource, action) {
   const base = GUIDANCE[resource] || resource;
-  if (action === "list") return `List ${resource} records. Supports documented filters and pagination (page, per_page; per_page 1–100). ${base}`;
-  if (action === "get") return `Retrieve one ${resource} record by its ID. ${base}`;
-  if (action === "create") return (resource === "payments" ? "Record a payment. " : `Create a ${resource} record. `) + base;
-  if (action === "update") return `Update a ${resource} record by ID. ${base}`;
-  if (resource === "payments") return "Void a payment by ID. This is a soft delete and requires a reason; it does not erase payment history.";
-  return `Delete a ${resource} record by ID. This operation changes live workspace data.`;
+  return describeRestTool(resource, action, base);
+}
+
+function validateRestBody(resource, body) {
+  if (resource === "quotes" && body.valid_until && body.quote_date && body.valid_until < body.quote_date) {
+    return "body.valid_until must be on or after body.quote_date.";
+  }
+  if (resource === "recurring-invoices" && body.end_date && body.start_date && body.end_date < body.start_date) {
+    return "body.end_date must be on or after body.start_date.";
+  }
+  return null;
 }
 
 export const tools = [];
@@ -54,32 +60,25 @@ for (const [resource, actions] of Object.entries(RESOURCES)) {
       required.push("id");
     }
     if (action === "list") {
-      properties.query = {
-        type: "object",
-        description: "Optional documented filters. Pagination: page >= 1; per_page is 1–100 (default 25).",
-        properties: {
-          page: { type: "integer", minimum: 1 },
-          per_page: { type: "integer", minimum: 1, maximum: 100 },
-        },
-        additionalProperties: true,
+      const querySchema = RESOURCE_CONTRACTS[resource]?.query;
+      if (querySchema) properties.query = {
+        ...querySchema,
+        description: "Optional query fields documented by the SyrianFatora REST reference. Pagination defaults to 25; per_page is 1–100.",
       };
     }
     if (["create", "update"].includes(action)) {
       properties.body = {
-        type: "object",
-        description: "JSON request body using exact SyrianFatora API field names. Do not include server-calculated invoice, quote or recurring-invoice totals.",
-        additionalProperties: true,
+        ...RESOURCE_CONTRACTS[resource][action],
+        description: "Exact JSON request body documented by page.html. Unknown fields and server-calculated totals are rejected.",
       };
       required.push("body");
     }
     if (resource === "payments" && action === "delete") {
-      properties.reason = {
-        type: "string",
-        minLength: 3,
-        maxLength: 500,
-        description: "Required reason for voiding this payment.",
+      properties.void_reason = {
+        ...RESOURCE_CONTRACTS[resource].delete.properties.void_reason,
+        description: "Required REST request field void_reason: reason for voiding this payment.",
       };
-      required.push("reason");
+      required.push("void_reason");
     }
     tools.push({
       name: `${resource.replace(/-/g, "_")}_${action}`,
@@ -288,6 +287,10 @@ export async function handleMcpRequest(request, props, {
   }
   const validationError = validateToolArguments(tool, args);
   if (validationError) return toolError(id, `Invalid tool arguments: ${validationError}`);
+  if (["create", "update"].includes(action)) {
+    const bodyError = validateRestBody(resource, args.body);
+    if (bodyError) return toolError(id, `Invalid tool arguments: ${bodyError}`);
+  }
 
   const method = action === "list" || action === "get"
     ? "GET"
@@ -332,10 +335,10 @@ export async function handleMcpRequest(request, props, {
     body = JSON.stringify(args.body);
     headers["Content-Type"] = "application/json";
   } else if (resource === "payments" && action === "delete") {
-    if (typeof args.reason !== "string" || args.reason.trim().length < 3 || args.reason.length > 500) {
-      return toolError(id, "A void reason of 3–500 characters is required.");
+    if (typeof args.void_reason !== "string" || !args.void_reason.trim()) {
+      return toolError(id, "A non-empty void_reason string is required.");
     }
-    body = JSON.stringify({ reason: args.reason.trim() });
+    body = JSON.stringify({ void_reason: args.void_reason.trim() });
     headers["Content-Type"] = "application/json";
   }
 

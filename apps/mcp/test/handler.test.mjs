@@ -44,13 +44,14 @@ test("rejects undeclared top-level tool arguments", async () => {
   assert.match((await json(response)).result.content[0].text, /unsupported property: unexpected/);
 });
 
-test("preserves extensible documented query filters", async () => {
+test("forwards only the documented customer filters", async () => {
   let observed;
   const response = await handleMcpRequest(rpc("tools/call", {
-    name: "customers_list", arguments: { query: { per_page: 10, status: "active" } },
+    name: "customers_list", arguments: { query: { per_page: 10, search: "Acme" } },
   }), props, { checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async (url) => { observed = url; return Response.json({ data: [] }); } });
-  assert.equal(new URL(observed).searchParams.get("status"), "active");
+  assert.equal(new URL(observed).searchParams.get("search"), "Acme");
+  assert.equal(new URL(observed).searchParams.get("per_page"), "10");
   assert.equal((await json(response)).result.isError, false);
 });
 
@@ -155,7 +156,7 @@ test("read-only customer listing forwards the grant key only upstream", async ()
   let observed;
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "customers_list",
-    arguments: { query: { page: 2, per_page: 10, active: true } },
+    arguments: { query: { page: 2, per_page: 10, search: "Acme" } },
   }), props, {
     checkUpstreamCooldown: async () => ({ allowed: true }),
     fetchImpl: async (url, options) => {
@@ -171,6 +172,7 @@ test("read-only customer listing forwards the grant key only upstream", async ()
   assert.equal(observed.options.headers.Authorization, `Bearer ${apiKey}`);
   assert.equal(new URL(observed.url).pathname, "/api/public/v1/customers");
   assert.equal(new URL(observed.url).searchParams.get("per_page"), "10");
+  assert.equal(new URL(observed.url).searchParams.get("search"), "Acme");
   assert.equal(body.result.isError, false);
   assert.equal(body.result.content[0].text.includes(apiKey), false);
 });
@@ -179,7 +181,11 @@ test("write operations are denied without mcp:write before any upstream request"
   let called = false;
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "invoices_create",
-    arguments: { body: { customer_id: "c-1" } },
+    arguments: { body: {
+      customer_id: 42, status: "draft", invoice_date: "2026-06-29",
+      currency: "SYP", language: "ar", discount_type: "fixed",
+      tax_mode: "invoice", items: [{ title: "Consulting", qty: 1, unit_price: 100, discount_type: "fixed" }],
+    } },
   }), props, {
     requireWriteScope: () => new Response("insufficient_scope", { status: 403 }),
     fetchImpl: async () => { called = true; throw new Error("must not be called"); },
@@ -193,7 +199,11 @@ test("write operations are allowed when mcp:write is granted", async () => {
   let observed;
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "invoices_create",
-    arguments: { body: { customer_id: "c-1" } },
+    arguments: { body: {
+      customer_id: 42, status: "draft", invoice_date: "2026-06-29",
+      currency: "SYP", language: "ar", discount_type: "fixed",
+      tax_mode: "invoice", items: [{ title: "Consulting", qty: 1, unit_price: 100, discount_type: "fixed" }],
+    } },
   }), props, {
     requireWriteScope: () => null,
     checkUpstreamCooldown: async () => ({ allowed: true }),
@@ -206,23 +216,104 @@ test("write operations are allowed when mcp:write is granted", async () => {
 
   assert.equal(observed.options.method, "POST");
   assert.equal(observed.options.headers.Authorization, `Bearer ${apiKey}`);
-  assert.deepEqual(JSON.parse(observed.options.body), { customer_id: "c-1" });
+  assert.deepEqual(JSON.parse(observed.options.body), {
+    customer_id: 42, status: "draft", invoice_date: "2026-06-29",
+    currency: "SYP", language: "ar", discount_type: "fixed",
+    tax_mode: "invoice", items: [{ title: "Consulting", qty: 1, unit_price: 100, discount_type: "fixed" }],
+  });
   assert.equal(body.result.isError, false);
 });
 
-test("payment void still requires a reason", async () => {
+test("payment void requires the exact documented void_reason field", async () => {
   let called = false;
+  const missing = await handleMcpRequest(rpc("tools/call", {
+    name: "payments_delete", arguments: { id: "payment-1", reason: "legacy field" },
+  }), props, { requireWriteScope: () => null,
+    fetchImpl: async () => { called = true; return Response.json({}); } });
+  assert.match((await json(missing)).result.content[0].text, /void_reason is required/);
+  assert.equal(called, false);
+});
+
+test("payment void maps void_reason to the exact REST DELETE body", async () => {
+  let observed;
   const response = await handleMcpRequest(rpc("tools/call", {
-    name: "payments_delete",
-    arguments: { id: "payment-1", reason: " " },
+    name: "payments_delete", arguments: { id: "payment-1", void_reason: "Recorded by mistake" },
   }), props, {
     requireWriteScope: () => null,
-    fetchImpl: async () => { called = true; return Response.json({}); },
+    checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async (url, options) => {
+      observed = { url, options };
+      return Response.json({ message: "Payment voided." });
+    },
   });
-  const body = await json(response);
+  assert.equal(observed.options.method, "DELETE");
+  assert.deepEqual(JSON.parse(observed.options.body), { void_reason: "Recorded by mistake" });
+  assert.equal(new URL(observed.url).pathname, "/api/public/v1/payments/payment-1");
+  assert.equal((await json(response)).result.isError, false);
+});
 
-  assert.equal(body.result.isError, true);
-  assert.match(body.result.content[0].text, /arguments\.reason is too short/);
+test("publishes strict REST query and body schemas from the developer reference", () => {
+  const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
+  assert.deepEqual(Object.keys(byName.customers_list.inputSchema.properties.query.properties).sort(),
+    ["page", "per_page", "search"]);
+  assert.equal(byName.payment_methods_list.inputSchema.properties.query, undefined);
+  assert.deepEqual(byName.items_create.inputSchema.properties.body.required,
+    ["name", "type", "default_unit_price"]);
+  assert.equal(byName.items_create.inputSchema.properties.body.additionalProperties, false);
+  assert.deepEqual(byName.payments_delete.inputSchema.required, ["id", "void_reason"]);
+  assert.equal(byName.payments_delete.inputSchema.properties.void_reason.maxLength, undefined);
+});
+
+test("rejects undocumented filters and unsupported body fields before upstream access", async () => {
+  let called = false;
+  const options = { checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async () => { called = true; return Response.json({}); } };
+  const filter = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list", arguments: { query: { status: "active" } },
+  }), props, options);
+  assert.match((await json(filter)).result.content[0].text, /unsupported property: status/);
+  const body = await handleMcpRequest(rpc("tools/call", {
+    name: "items_create", arguments: { body: {
+      name: "Service", type: "service", default_unit_price: 10, total: 10,
+    } },
+  }), props, options);
+  assert.match((await json(body)).result.content[0].text, /unsupported property: total/);
+  assert.equal(called, false);
+});
+
+test("validates documented numeric bounds, enums, and calendar dates", async () => {
+  const invalidQty = await handleMcpRequest(rpc("tools/call", {
+    name: "invoices_create", arguments: { body: {
+      customer_id: 1, status: "draft", invoice_date: "2026-02-30", currency: "SYP",
+      language: "ar", discount_type: "fixed", tax_mode: "invoice",
+      items: [{ title: "Line", qty: 0, unit_price: 1, discount_type: "fixed" }],
+    } },
+  }), props);
+  assert.match((await json(invalidQty)).result.content[0].text, /valid YYYY-MM-DD date/);
+});
+
+test("enforces documented quote and recurring-schedule date ordering", async () => {
+  let called = false;
+  const options = { checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async () => { called = true; return Response.json({}); } };
+  const quote = await handleMcpRequest(rpc("tools/call", {
+    name: "quotes_create", arguments: { body: {
+      customer_id: 1, status: "draft", quote_date: "2026-06-30", valid_until: "2026-06-29",
+      currency: "SYP", language: "ar", discount_type: "fixed", tax_mode: "invoice",
+      items: [{ title: "Line", qty: 1, unit_price: 1, discount_type: "fixed" }],
+    } },
+  }), props, options);
+  assert.match((await json(quote)).result.content[0].text, /valid_until must be on or after/);
+
+  const recurring = await handleMcpRequest(rpc("tools/call", {
+    name: "recurring_invoices_create", arguments: { body: {
+      customer_id: 1, currency: "SYP", language: "ar", frequency: "monthly",
+      interval_count: 1, start_date: "2026-07-01", next_run_date: "2026-07-01",
+      end_date: "2026-06-30", discount_type: "fixed", tax_mode: "invoice",
+      items: [{ title: "Line", qty: 1, unit_price: 1, discount_type: "fixed" }],
+    } },
+  }), props, options);
+  assert.match((await json(recurring)).result.content[0].text, /end_date must be on or after/);
   assert.equal(called, false);
 });
 
