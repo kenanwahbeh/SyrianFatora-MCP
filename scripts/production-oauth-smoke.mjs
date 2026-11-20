@@ -156,6 +156,24 @@ async function mcpRequest(method, params, accessToken, id, sessionId) {
   return { message, sessionId: response.headers.get("MCP-Session-Id") ?? sessionId };
 }
 
+async function mcpNotification(method, accessToken, sessionId) {
+  const response = await fetch(`${MCP_ORIGIN}/mcp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      "MCP-Protocol-Version": "2025-03-26",
+      ...(sessionId ? { "MCP-Session-Id": sessionId } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", method }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (![200, 202, 204].includes(response.status)) {
+    throw new Error(`MCP notification ${method} returned HTTP ${response.status}`);
+  }
+}
+
 async function main() {
   console.log("SyrianFatora authenticated production smoke test");
   console.log(`Auth: ${AUTH_ORIGIN}`);
@@ -211,6 +229,7 @@ async function main() {
     }, tokens.access_token, 1);
     assert.equal(initialized.message.result?.serverInfo?.name, "syrianfatora-mcp");
     console.log("3/5 Authenticated MCP initialize succeeded.");
+    await mcpNotification("notifications/initialized", tokens.access_token, initialized.sessionId);
 
     const listed = await mcpRequest("tools/list", {}, tokens.access_token, 2, initialized.sessionId);
     const tools = listed.message.result?.tools;
