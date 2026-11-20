@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handleMcpRequest, tools } from "../src/handler.mjs";
+import { previewClientMetadataResponse } from "../src/preview-metadata.mjs";
 
 const apiKey = "sk_live_test_key_never_use_in_production_123";
 const props = {
@@ -38,6 +39,36 @@ test("initialize returns the negotiated MCP protocol version", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.result.protocolVersion, "2025-03-26");
   assert.equal(body.result.serverInfo.name, "syrianfatora-mcp");
+  assert.equal(body.result.serverInfo.version, "1.2.0");
+});
+
+
+test("production hides Preview client metadata while the isolated Preview Worker retains it", async () => {
+  const url = new URL("https://syrianfatora-mcp.example.test/oauth/client-metadata.json");
+
+  const production = previewClientMetadataResponse(url, { IS_PREVIEW: "false" });
+  assert.equal(production.status, 404);
+  assert.equal(production.headers.get("Cache-Control"), "no-store");
+
+  const missingBinding = previewClientMetadataResponse(url, {});
+  assert.equal(missingBinding.status, 404);
+
+  const preview = previewClientMetadataResponse(url, { IS_PREVIEW: "true" });
+  assert.equal(preview.status, 200);
+  const metadata = await preview.json();
+  assert.equal(metadata.client_id, url.href);
+  assert.equal(metadata.client_name, "SyrianFatora Preview E2E Client");
+  assert.deepEqual(metadata.redirect_uris, ["https://example.com/oauth/callback"]);
+});
+
+test("MCP initialize can report a Preview-only version without leaking it into Production", async () => {
+  const production = await handleMcpRequest(rpc("initialize", { protocolVersion: "2025-03-26" }), props);
+  const preview = await handleMcpRequest(rpc("initialize", { protocolVersion: "2025-03-26" }), props, {
+    serverVersion: "1.2.0-oauth-preview",
+  });
+
+  assert.equal((await production.json()).result.serverInfo.version, "1.2.0");
+  assert.equal((await preview.json()).result.serverInfo.version, "1.2.0-oauth-preview");
 });
 
 test("tools/list returns all existing tools without calling the upstream API", async () => {
