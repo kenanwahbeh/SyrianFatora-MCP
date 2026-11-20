@@ -209,7 +209,7 @@ export async function handleMcpRequest(request, props, {
 
   const id = message.id === undefined ? null : message.id;
   if (message.method !== "initialize") {
-    const protocolVersion = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
+    const protocolVersion = request.headers.get("MCP-Protocol-Version") ?? "2025-03-26";
     if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
       return rpcError(id, -32600, "Unsupported MCP-Protocol-Version. Supported versions: 2025-03-26, 2024-11-05.", 400);
     }
