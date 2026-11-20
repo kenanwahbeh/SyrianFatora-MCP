@@ -140,7 +140,7 @@ No workspace quota thresholds need to be selected or configured locally. The HMA
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/auth`
 - Build: `npm audit --audit-level=high && npm run build:check`
-- Deploy: `npx cf deploy --prebuilt --mode production --force`
+- Deploy: `npx cf deploy --prebuilt --mode production`
 - Paths: `apps/auth/**`, `apps/auth/package.json`, `apps/auth/package-lock.json`
 
 **Existing MCP Worker**
@@ -262,3 +262,14 @@ The branch-only Cloudflare dry-run trigger now filters to apps/mcp/** so documen
 ## Quota policy correction — 2026-11-19
 
 This section supersedes earlier PR #14 notes in this file that described local per-credential request budgets, per-grant request windows, a configured fallback cooldown, or a requirement to aggregate multiple API keys into a local workspace quota. Those descriptions document the previous implementation and are no longer current. The current source leaves workspace quota enforcement to SyrianFatora, retains authorization-attempt abuse protection, and stores a cooldown only from a valid provider Retry-After response. No local API usage quota is active.
+
+## OAuth consent retry release — 2026-11-20
+
+| Time (UTC) | Resource / action | Result and verification |
+| --- | --- | --- |
+| 2026-11-20T02:12:39Z | Auth Worker Cloudflare Build attempt for commit `136ec2a07e038354d6f32b491ee6460e97441d99` | Build validation failed before deployment: the refresh-token rotation test used the provider's 60-second minimum TTL and intermittently expired during rotation. No Worker version was uploaded; active version remained #4 `93411491-de13-4cd9-8d7e-d441d07ad674`. |
+| 2026-11-20T02:21:47Z–02:23:41Z | Auth Worker production Build for commit `a638ffb11f9929a536892703af13c48cb0b96ce5` (branch `fix/issue-17-oauth-consent-retry`) | Build `9151b105-479a-43b2-afee-393b2d84247e` succeeded. Dependency audit: zero vulnerabilities. Auth test suite: 41/41 passed. Deployed `syrianfatora-auth` version #5 `53dfd48f-5b83-49f9-bd8a-229255d82790`; deployment `d66496cb-7e13-48a4-8c4d-433c8dfd560d`; 100% traffic. |
+| 2026-11-20T02:23:42Z | Post-deployment read-only smoke checks | `/health` returned `ok: true`; OAuth discovery returned the expected issuer, authorization/token endpoints, and `mcp:read`, `mcp:write`, `offline_access` scopes. Cloudflare secret-binding inventory confirms `RATE_LIMIT_HMAC_SECRET` remains present; secret value was not read. |
+| 2026-11-20 | Rollback reference | Previous Auth Worker version #4 `93411491-de13-4cd9-8d7e-d441d07ad674`, deployment `67a91b5b-9b1b-4ca0-8af6-b88a657dc543`. |
+
+The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. The GitHub PR remains separate from the production build; no merge to `main` was performed.
