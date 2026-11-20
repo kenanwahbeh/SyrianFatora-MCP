@@ -78,7 +78,7 @@ async function getOrRegisterClient(redirectUri) {
     client_id: client.client_id,
     redirect_uri: redirectUri,
     registeredAt: Date.now(),
-  }, null, 2) + "\\n", { mode: 0o600 });
+  }, null, 2) + "\n", { mode: 0o600 });
   await chmod(CLIENT_CACHE_PATH, 0o600);
   return { client, reused: false };
 }
