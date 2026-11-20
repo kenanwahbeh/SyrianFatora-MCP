@@ -2,11 +2,18 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createHash, randomBytes } from "node:crypto";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
 
 const AUTH_ORIGIN = new URL(process.env.AUTH_ORIGIN ?? "https://syrianfatora-auth.kinan-api.workers.dev").origin;
 const MCP_ORIGIN = new URL(process.env.MCP_ORIGIN ?? "https://syrianfatora-mcp.kinan-api.workers.dev").origin;
 const MCP_RESOURCE = `${MCP_ORIGIN}/mcp`;
 const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000;
+const CALLBACK_PORT = Number(process.env.SMOKE_CALLBACK_PORT ?? 43127);
+const CLIENT_CACHE_PATH = process.env.SMOKE_CLIENT_CACHE
+  ?? path.join(homedir(), ".syrianfatora-smoke", "client.json");
+const CLIENT_CACHE_MAX_AGE_MS = 80 * 24 * 60 * 60 * 1000;
 
 function base64url(bytes) {
   return Buffer.from(bytes).toString("base64url");
@@ -46,6 +53,34 @@ async function registerClient(redirectUri) {
   const client = await readJson(response, "OAuth dynamic client registration");
   assert.equal(typeof client.client_id, "string", "registration did not return client_id");
   return client;
+}
+
+async function getOrRegisterClient(redirectUri) {
+  try {
+    const cached = JSON.parse(await readFile(CLIENT_CACHE_PATH, "utf8"));
+    const age = Date.now() - Number(cached.registeredAt);
+    if (
+      typeof cached.client_id === "string" &&
+      cached.redirect_uri === redirectUri &&
+      Number.isFinite(age) &&
+      age >= 0 &&
+      age < CLIENT_CACHE_MAX_AGE_MS
+    ) {
+      return { client: { client_id: cached.client_id }, reused: true };
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+  }
+
+  const client = await registerClient(redirectUri);
+  await mkdir(path.dirname(CLIENT_CACHE_PATH), { recursive: true, mode: 0o700 });
+  await writeFile(CLIENT_CACHE_PATH, JSON.stringify({
+    client_id: client.client_id,
+    redirect_uri: redirectUri,
+    registeredAt: Date.now(),
+  }, null, 2) + "\\n", { mode: 0o600 });
+  await chmod(CLIENT_CACHE_PATH, 0o600);
+  return { client, reused: false };
 }
 
 function waitForAuthorizationCode(server, expectedState) {
@@ -180,16 +215,17 @@ async function main() {
   console.log(`MCP:  ${MCP_ORIGIN}`);
   console.log("Read-only checks only. Tokens, API keys, and customer records are never printed.\n");
 
+  assert.ok(Number.isInteger(CALLBACK_PORT) && CALLBACK_PORT > 0 && CALLBACK_PORT <= 65535,
+    "SMOKE_CALLBACK_PORT must be a valid TCP port");
   const server = createServer();
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
+    server.listen(CALLBACK_PORT, "127.0.0.1", resolve);
   });
 
   try {
-    const address = server.address();
-    const redirectUri = `http://127.0.0.1:${address.port}/callback`;
-    const client = await registerClient(redirectUri);
+    const redirectUri = `http://127.0.0.1:${CALLBACK_PORT}/callback`;
+    const { client, reused } = await getOrRegisterClient(redirectUri);
     const state = base64url(randomBytes(32));
     const verifier = base64url(randomBytes(32));
     const challenge = createHash("sha256").update(verifier).digest("base64url");
@@ -207,7 +243,7 @@ async function main() {
       resource: MCP_RESOURCE,
     }).toString();
 
-    console.log("1/5 OAuth client registered.");
+    console.log(`1/5 OAuth test client ${reused ? "reused from local cache" : "registered and cached"}.`);
     console.log("\nOpen this URL in your browser and approve the read-only mcp:read permission.");
     console.log("Enter your SyrianFatora API key only on the official HTTPS authorization page:\n");
     console.log(authorizationUrl.toString());
