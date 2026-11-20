@@ -1,6 +1,7 @@
 export function isAllowedMcpOrigin(request, workerEnv = {}) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
+  if (origin === null) return true;
+  if (!origin || origin === "null") return false;
 
   let parsed;
   try {
@@ -8,7 +9,10 @@ export function isAllowedMcpOrigin(request, workerEnv = {}) {
   } catch {
     return false;
   }
-  if (parsed.origin !== origin || !["http:", "https:"].includes(parsed.protocol)) return false;
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  if (parsed.origin !== origin ||
+      (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) ||
+      parsed.username || parsed.password) return false;
   if (origin === new URL(request.url).origin) return true;
 
   const configured = typeof workerEnv.MCP_ALLOWED_ORIGINS === "string"
