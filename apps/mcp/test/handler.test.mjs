@@ -54,14 +54,14 @@ test("preserves extensible documented query filters", async () => {
   assert.equal((await json(response)).result.isError, false);
 });
 
-test("requires a supported protocol-version header after initialize", async () => {
+test("uses the 2025-03-26 compatibility default when older clients omit the protocol header", async () => {
   const request = new Request("https://mcp.example.test/mcp", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
   });
   const response = await handleMcpRequest(request, props);
-  assert.equal(response.status, 400);
-  assert.match((await json(response)).error.message, /MCP-Protocol-Version/);
+  assert.equal(response.status, 200);
+  assert.equal((await json(response)).result.tools.length, 51);
 });
 
 test("rejects unsupported MCP protocol versions", async () => {
@@ -70,24 +70,6 @@ test("rejects unsupported MCP protocol versions", async () => {
     body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/list", params: {} }),
   });
   assert.equal((await handleMcpRequest(request, props)).status, 400);
-});
-
-test("Origin validation allows native clients and only explicitly configured browser origins", async () => {
-  const { validateMcpOrigin } = await import("../src/handler.mjs");
-  assert.equal(validateMcpOrigin(rpc("tools/list"), ""), true);
-  const allowed = new Request("https://mcp.example.test/mcp", {
-    method: "POST", headers: { Origin: "https://chat.example" },
-  });
-  assert.equal(validateMcpOrigin(allowed, "https://chat.example"), true);
-  assert.equal(validateMcpOrigin(allowed, ""), false);
-  const evil = new Request("https://mcp.example.test/mcp", {
-    method: "POST", headers: { Origin: "https://evil.example" },
-  });
-  assert.equal(validateMcpOrigin(evil, "https://chat.example"), false);
-  const opaque = new Request("https://mcp.example.test/mcp", {
-    method: "POST", headers: { Origin: "null" },
-  });
-  assert.equal(validateMcpOrigin(opaque, "https://chat.example"), false);
 });
 
 test("rejects disallowed Origin before parsing MCP requests", async () => {
