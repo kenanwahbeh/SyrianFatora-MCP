@@ -4,6 +4,7 @@ import {
 } from "@cloudflare/workers-oauth-provider";
 import { env } from "cloudflare:workers";
 import { handleMcpRequest } from "./handler.mjs";
+import { isAllowedMcpOrigin } from "./origin-validation.mjs";
 import { checkUpstreamCooldown, recordProviderCooldown } from "./rate-limit-client.mjs";
 import { previewClientMetadataResponse } from "./preview-metadata.mjs";
 
@@ -61,6 +62,13 @@ export default {
         service: "syrianfatora-mcp",
         mode: "oauth-resource-server",
         toolCount: 51,
+      }));
+    }
+
+    if (url.pathname === "/mcp" && !isAllowedMcpOrigin(request, workerEnv)) {
+      return addCors(new Response("Forbidden origin.", {
+        status: 403,
+        headers: { "Cache-Control": "no-store" },
       }));
     }
 
