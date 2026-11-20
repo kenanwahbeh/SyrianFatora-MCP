@@ -15,8 +15,8 @@
 | Auth immediate rollback | v5 `53dfd48f-5b83-49f9-bd8a-229255d82790` / `d66496cb-7e13-48a4-8c4d-433c8dfd560d` |
 | Existing MCP Worker | `syrianfatora-mcp` (migrated in place) |
 | MCP resource URL | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
-| MCP version / deployment | v8 `c83dc9c3-daf6-4f2e-961e-a792605c2ed7` / `17e5289a-f676-49a6-b412-638f09b8776e` (100% traffic) |
-| MCP immediate rollback | v7 `fce1bf08-2f1c-481b-a46c-1792420a3c2d` / `76d7e407-4ced-4fd7-8a07-d49418943346` |
+| MCP version / deployment | v10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` / `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic) |
+| MCP immediate rollback | v9 `ef5d0c42-9375-42b2-81e4-73b734707b22` / `d1f2fbf3-e4e6-46f6-bd3c-8283dc80ff0c` (rollback reintroduces the Preview metadata endpoint) |
 | MCP pre-migration baseline | v4 `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (captured before code migration; secret already present) |
 | OAuth KV | `syrianfatora-oauth-production`, `d19d9bd755c349f688cd55e299b8168f` |
 | SQLite Durable Object | `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
@@ -28,7 +28,7 @@
 
 The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` and `RATE_LIMITER` bound to the Auth Worker's SQLite Durable Object namespace. The Auth Worker has the production KV binding and the same HMAC secret. No custom domain or DNS record was changed.
 
-**Rollback note:** The immediate rollback targets are Auth v5 (`53dfd48f-5b83-49f9-bd8a-229255d82790`) and MCP v7 (`fce1bf08-2f1c-481b-a46c-1792420a3c2d`). MCP v4 (`ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5`) remains the captured pre-migration baseline. Auth v3 was the first functional production release; v5 is the immediate known-good predecessor to current v6.
+**Rollback note:** The immediate rollback targets are Auth v5 (`53dfd48f-5b83-49f9-bd8a-229255d82790`) and MCP v9 (`ef5d0c42-9375-42b2-81e4-73b734707b22`). MCP v9 predates the Preview cleanup and re-exposes the Preview metadata endpoint; if rollback is required, reapply the Preview gate before declaring the production interface clean. MCP v4 (`ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5`) remains the captured pre-migration baseline. Auth v3 was the first functional production release; v5 is the immediate known-good predecessor to current v6.
 
 ### Verification
 
@@ -39,7 +39,7 @@ The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` a
 - MCP request with a deliberately invalid bearer token: HTTP 401.
 - GitHub Actions production smoke runs `44456841885` (initial cutover) and `44457599094` (after final MCP version 6 and preview-URL disablement) both completed successfully on 2026-11-19.
 - Auth unit tests: 41/41 pass on the deployed v6 source, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
-- MCP unit tests on `main`: 21/21 pass.
+- MCP unit tests on `main`: 24/24 pass.
 - `npm audit --audit-level=high`: zero vulnerabilities for both packages using npm 10.9.2, matching Cloudflare Build.
 - **Still outstanding:** a real Workspace-key Authorization Code + PKCE flow, token issuance/refresh, and an authenticated read-only MCP tool call. No real key was shared or used. No production write operations were tested.
 
@@ -282,7 +282,7 @@ The release changed only the Auth Worker code. No MCP Worker, KV namespace, Dura
 | Worker | Successful Cloudflare Build | Source commit | Deployed version | Deployment |
 | --- | --- | --- | --- | --- |
 | Auth | `0c5e5ce8-09ed-4351-bcaa-c27f9c4cf8aa` | `b81461cf619d17da77d384149711fd0fe78abb7f` (merge of PR #49) | #6 `2f25855b-9299-47a1-88f6-65bf04f48da9` | `34b83009-a63b-418b-ace6-a9365ad70cf3` |
-| MCP | `fa828a30-6050-42ff-a7c2-d7463e01d5ae` | `c36bae5bd633fcf09510c781b7d02bfa2d3eceae` | #8 `c83dc9c3-daf6-4f2e-961e-a792605c2ed7` | `17e5289a-f676-49a6-b412-638f09b8776e` |
+| MCP (Preview cleanup) | `249f8daf-d0c8-41dc-8f9c-91a7d9cb7ff5` | `73d58ac9e438d933bd7a9f5bc54bf7acf902c474` (merge of PR #52) | #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` | `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` |
 
 Both builds completed successfully. The Auth and MCP build commands each ran dependency audit, `cf build`, and `node --test`; both production deploy commands omitted `--force`.
 
@@ -293,11 +293,19 @@ Read-only post-deployment probes on 2026-11-20 returned:
 
 These probes do not establish a valid Workspace-key OAuth session or authenticated MCP tool call.
 
-## Confirmed production Preview artifact — 2026-11-20
+## Production Preview artifact cleanup — 2026-11-20
 
-A read-only GET to `https://syrianfatora-mcp.kinan-api.workers.dev/oauth/client-metadata.json` returned HTTP 200 and the client name `SyrianFatora Preview E2E Client`, with placeholder redirect URI `https://example.com/oauth/callback`. This is a Preview test document exposed by the current production Worker and is not suitable as production client metadata.
+Before PR #52, a read-only GET to `https://syrianfatora-mcp.kinan-api.workers.dev/oauth/client-metadata.json` returned HTTP 200 with `SyrianFatora Preview E2E Client` and placeholder redirect URI `https://example.com/oauth/callback`.
 
-Draft PR #52 gates this endpoint behind `IS_PREVIEW=true`, returns 404 in Production, and keeps the CIMD test document available only on the isolated Preview Worker. It also removes the Preview suffix from the production MCP `initialize` version. The PR is not merged and no production deployment has been made for this fix; the live endpoint remains unchanged until separate review and deployment approval.
+PR #52 was merged in commit `73d58ac9e438d933bd7a9f5bc54bf7acf902c474`. Cloudflare Build `249f8daf-d0c8-41dc-8f9c-91a7d9cb7ff5` succeeded and deployed MCP version #10 (`8b7e8158-b175-44fe-98d5-4f151eef51f2`) in deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`.
+
+Post-deployment checks confirmed:
+- `IS_PREVIEW=false` in the live Worker version bindings.
+- Production `/oauth/client-metadata.json` returns HTTP 404.
+- Production `/health` remains `ok: true` with 51 tools.
+- Protected-resource metadata still points to the production MCP resource and Auth issuer.
+
+The isolated Preview Worker and its CIMD test document remain intact. **Rollback warning:** immediate rollback version #9 predates PR #52 and will re-expose the Preview metadata endpoint; if rollback is required, track and reapply the Preview gate before declaring the production interface clean.
 
 ## Current NO-GO release gates
 

@@ -29,4 +29,4 @@ The production Cloudflare Worker `syrianfatora-mcp` already serves the public MC
 
 ## Follow-up implementation
 
-The initial migration's test deferral was temporary. Subsequent work added the Auth SQLite Durable Object concurrency tests and the full Auth/MCP CI gates. On `main`, Auth passes 41/41 tests and MCP passes 21/21 tests. Production health, OAuth discovery, protected-resource metadata, tool count, and invalid-token rejection were verified. Real Workspace-key OAuth and an authenticated MCP tool call remain outstanding.
+The initial migration's test deferral was temporary. Subsequent work added the Auth SQLite Durable Object concurrency tests and the full Auth/MCP CI gates. On `main`, Auth passes 41/41 tests and MCP passes 24/24 tests. Production health, OAuth discovery, protected-resource metadata, tool count, and invalid-token rejection were verified. Real Workspace-key OAuth and an authenticated MCP tool call remain outstanding.

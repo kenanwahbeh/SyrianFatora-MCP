@@ -46,11 +46,11 @@ RATE_LIMIT_HMAC_SECRET remains required for privacy-preserving credential/IP ide
 
 The source tests cover concurrent authorization-attempt protection in the SQLite Durable Object; credential-attempt protection without a second credential usage bucket; provider-directed cooldown behavior; MCP cooldown checks without grant fingerprints or local usage charges; missing secret/binding failure behavior; handler behavior when provider cooldown is active; and provider quota headers/upstream 429 handling.
 
-On `main`, the Auth suite passes 41/41 and the MCP suite passes 21/21; the Cloudflare Build workflows run audit, build, and test gates. These source tests do not prove a real Workspace-key OAuth flow or authenticated MCP tool call; see the production migration log and the ordered release gates.
+On `main`, the Auth suite passes 41/41 and the MCP suite passes 24/24; the Cloudflare Build workflows run audit, build, and test gates. These source tests do not prove a real Workspace-key OAuth flow or authenticated MCP tool call; see the production migration log and the ordered release gates.
 
 ## Production safety
 
 - The Auth and MCP Workers are deployed with the provider-owned quota model. Production binding/secret inventory and read-only endpoint checks are recorded in `docs/production-migration.md`.
-- The 2026-11-20 Auth release passed 41/41 tests; the current `main` MCP suite passes 21/21. The rate-limiter behavior is source-tested and the production bindings are verified.
+- The 2026-11-20 Auth release passed 41/41 tests; the current `main` MCP suite passes 24/24. The rate-limiter behavior is source-tested and the production bindings are verified.
 - Do not introduce local per-key, per-grant, daily, or monthly request quotas. Production write-operation tests remain prohibited.
 - Never test write operations against a real customer workspace.

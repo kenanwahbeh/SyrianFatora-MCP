@@ -10,11 +10,11 @@
 | Component | Current production state |
 | --- | --- |
 | Auth Worker | `syrianfatora-auth`, version #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`, deployment `34b83009-a63b-418b-ace6-a9365ad70cf3` |
-| MCP Worker | `syrianfatora-mcp`, version #8 `c83dc9c3-daf6-4f2e-961e-a792605c2ed7`, deployment `17e5289a-f676-49a6-b412-638f09b8776e` |
+| MCP Worker | `syrianfatora-mcp`, version #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2`, deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` |
 | MCP endpoint | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
 | OAuth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
 | MCP catalogue | 51 tools |
-| Main-branch tests | Auth 41/41; MCP 21/21 |
+| Main-branch tests | Auth 41/41; MCP 24/24 |
 | Dependency audit | 0 high-severity vulnerabilities |
 
 Production health, OAuth discovery, protected-resource metadata, MCP tool count, and invalid-token rejection have passed. These checks do **not** prove a successful OAuth authorization using a real Workspace key or an authenticated MCP tool call.
@@ -40,30 +40,30 @@ Complete these gates in this exact order. Do not skip ahead to a real key.
 
 - [x] Read-only inspection confirms both current production Cloudflare Build deploy commands are `npx cf deploy --prebuilt --mode production` with no `--force`.
 - [x] Both triggers are path-scoped to their own application directories and target `main`.
-- [ ] Merge the deployment-policy/runbook clarification in draft PR #50 after review.
+- [x] Merge the deployment-policy/runbook clarification in PR #50; both live triggers remain free of `--force`.
 - [ ] Keep any future one-time `--force` migration separate, explicitly approved, baseline-captured, and removed from the trigger afterward.
 
-**Evidence:** PR #50 — https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/50 (draft; not merged).
+**Evidence:** PR #50 merged to `main`; live Cloudflare Build triggers were rechecked after merge.
 
 ### 2. Authenticated Smoke Test — exercise real MCP tools
 
 - [x] The operator-run script performs OAuth Authorization Code + PKCE, captures the loopback callback, and requests only `mcp:read`.
 - [x] The script calls authenticated MCP `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` with `per_page=1`.
 - [x] A local mocked integration test exercises registration, state, PKCE, session handling, tool discovery, and the read-only tool call without a real key or production request.
-- [ ] Merge the smoke cache fix and local integration harness in draft PR #51 after review.
+- [x] Merge the smoke cache fix and local integration harness in PR #51; the MCP suite on `main` now includes the local mock OAuth/MCP flow test.
 - [ ] Do not run the real production OAuth smoke yet; that belongs to gate 6 after gates 1–5 are closed.
 
-**Evidence:** PR #51 — https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/51 (draft; not merged). The local mock test is not production OAuth evidence.
+**Evidence:** PR #51 merged to `main`; MCP tests pass 24/24. The local mock test is not production OAuth evidence.
 
 ### 3. Remove Preview artifacts from the Production interface
 
 - [x] Confirmed production `/oauth/client-metadata.json` currently returns `SyrianFatora Preview E2E Client` and a placeholder `example.com` redirect URI.
 - [x] Prepared a source fix that returns 404 in Production, retains the CIMD test document only in Preview, and removes the Preview suffix from the production MCP server version.
-- [ ] Review and merge draft PR #52.
-- [ ] Deploy only after separate explicit approval, then verify the production endpoint returns 404 and MCP `initialize` reports the non-Preview version.
-- [ ] Preserve the isolated Preview Worker and its Preview-only CIMD test path; do not delete Preview resources as part of this cleanup.
+- [x] Merge PR #52 and verify the automatic Cloudflare Build deployment.
+- [x] Verify production `/oauth/client-metadata.json` returns 404 and the live Worker binding has `IS_PREVIEW=false`.
+- [x] Preserve the isolated Preview Worker and its Preview-only CIMD test path; no Preview resources were deleted.
 
-**Evidence:** PR #52 — https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/52 (draft; not merged or deployed).
+**Evidence:** PR #52 merged; Cloudflare Build `249f8daf-d0c8-41dc-8f9c-91a7d9cb7ff5`, MCP v10 deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`. Immediate rollback v9 reintroduces the Preview metadata route.
 
 ### 4. Unify documentation and release history
 

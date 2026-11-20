@@ -67,7 +67,7 @@ SyrianFatora response headers `X-RateLimit-Limit` and `X-RateLimit-Remaining`, t
 
 ## Testing and production evidence
 
-The historical PR #14 test exception was superseded by the later SQLite-backed Durable Object test suite. On `main`, the Auth suite passes 41/41 tests, including concurrent authorization-attempt serialization; the MCP suite passes 21/21 tests. Both Cloudflare Build triggers run `npm audit --audit-level=high`, `npm run build:check`, and `node --test` before deployment. The current deployed Auth and MCP versions and their health/discovery probes are recorded in `docs/production-migration.md`.
+The historical PR #14 test exception was superseded by the later SQLite-backed Durable Object test suite. On `main`, the Auth suite passes 41/41 tests, including concurrent authorization-attempt serialization; the MCP suite passes 24/24 tests. Both Cloudflare Build triggers run `npm audit --audit-level=high`, `npm run build:check`, and `node --test` before deployment. The current deployed Auth and MCP versions and their health/discovery probes are recorded in `docs/production-migration.md`.
 
 These tests and unauthenticated production probes do not establish a successful real Workspace-key OAuth flow or authenticated MCP tool call. That remains NO-GO until the ordered release gates are closed. No production write-operation tests are allowed.
 

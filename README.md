@@ -13,14 +13,15 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 **Status: Production OAuth infrastructure deployed; real Workspace-key verification remains NO-GO.**
 
 - Auth Worker: https://syrianfatora-auth.kinan-api.workers.dev — version #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`, deployment `34b83009-a63b-418b-ace6-a9365ad70cf3`.
-- Existing MCP Worker: https://syrianfatora-mcp.kinan-api.workers.dev/mcp — version #8 `c83dc9c3-daf6-4f2e-961e-a792605c2ed7`, deployment `17e5289a-f676-49a6-b412-638f09b8776e`.
+- Existing MCP Worker: https://syrianfatora-mcp.kinan-api.workers.dev/mcp — version #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2`, deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`.
 - OAuth issuer, authorization discovery, and protected-resource metadata are live; MCP health reports **51 tools**.
 - Production probes verified health, OAuth discovery, protected-resource metadata, and invalid bearer-token rejection (401). These probes did **not** prove an authenticated MCP tool call using a real Workspace key.
-- GitHub Actions: 41 Auth tests and 21 MCP tests pass on `main`; SQLite Durable Object concurrency and provider-directed 429 cooldown tests are covered.
+- GitHub Actions: 41 Auth tests and 24 MCP tests pass on `main`; SQLite Durable Object concurrency and provider-directed 429 cooldown tests are covered.
 - `npm audit --audit-level=high` reports zero vulnerabilities; Cloudflare Build triggers run audit, build, and tests.
 - Both live production Build triggers deploy without `--force`; the flag is not configured in either automatic trigger.
 - Production `workers.dev` endpoints remain enabled; public version-preview URLs are disabled.
-- **Confirmed outstanding Preview artifact:** the production MCP `/oauth/client-metadata.json` endpoint still advertises `SyrianFatora Preview E2E Client`; cleanup is prepared in draft PR #52 and is not deployed.
+- **Preview cleanup completed:** PR #52 is merged; production `/oauth/client-metadata.json` returns 404 and the live MCP version has `IS_PREVIEW=false`. The isolated Preview Worker remains available.
+- **Rollback caution:** immediate MCP rollback version #9 predates the Preview cleanup and re-exposes the Preview client metadata endpoint.
 - **Confirmed OAuth lifecycle gap:** Auth v6 may issue refresh tokens even when optional `offline_access` was not approved; the correction is prepared in draft PR #54 and is not deployed.
 - **NO-GO:** do not enter a real Workspace key until the six ordered gates in [the implementation plan](docs/implementation-plan.md) are closed. No real-key token issuance/refresh or authenticated production tool call has been verified.
 
