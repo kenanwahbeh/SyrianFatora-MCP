@@ -38,7 +38,7 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 3. Keep the separate authorization Worker as the OAuth architecture dependency.
 4. Keep the production issuer/resource URLs and KV/DO bindings aligned with the Cloudflare configuration.
 5. Preserve a rollback path to the previous MCP script version before any future production overwrite.
-6. Use `--force` only for an explicitly reviewed migration of the script-API-managed Worker, after capturing its current version and rollback reference. Never use it as a blind workaround.
+6. Never configure `--force` in an automatic CI or Cloudflare Build production trigger. A one-time `--force` migration is permitted only with separate explicit approval, after capturing the live Worker version and metadata, verifying the complete replacement artifact, and documenting a rollback reference; remove the flag from the trigger immediately afterward.
 7. Run dependency audit, build checks, and unit tests before deployment. Run only read-only smoke tests against production; never test create/update/delete operations against a real workspace.
 8. Never put API keys, OAuth tokens, signing keys, KV secrets, or Cloudflare credentials in Git, issues, logs, or chat.
 9. Record production resources, version IDs, deployment IDs, probes, and rollback references in [the production migration log](docs/production-migration.md).

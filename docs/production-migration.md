@@ -104,7 +104,7 @@ The reported conflict was:
 - The live Worker was last updated through the script API.
 - Cloudflare warned that a CLI upload would override script-API edits and aborted, suggesting `cf deploy --force`.
 
-No successful production overwrite was reported from this failed build. This was resolved on 2026-11-19 only after the live MCP script/version and rollback reference were captured, the production config was reviewed, and the intended in-place overwrite was confirmed. The Cloudflare Build deploy command now uses `--force` deliberately for that reviewed migration; it is not a general-purpose workaround.
+No successful production overwrite was reported from this failed build. The 2026-11-19 in-place migration was performed only after the live MCP script/version and rollback reference were captured, the production config was reviewed, and the intended overwrite was explicitly approved. Any `--force` use for that migration was a one-time exception, not a standing deployment setting. A read-only inspection of the live Cloudflare Build configuration on 2026-11-20 confirmed that the current MCP production trigger deploy command is `npx cf deploy --prebuilt --mode production` with no `--force`; the Auth trigger has the same no-force policy.
 
 ## Provider quota and abuse-protection behavior
 
@@ -149,7 +149,7 @@ No workspace quota thresholds need to be selected or configured locally. The HMA
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/mcp`
 - Build: `npm audit --audit-level=high && npm run build:check`
-- Deploy: `npx cf deploy --prebuilt --mode production --force`
+- Deploy: `npx cf deploy --prebuilt --mode production` (verified against the live Cloudflare Build trigger on 2026-11-20; no `--force`)
 - Paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
 
 Both triggers are path-scoped so documentation-only changes do not start production deployments. The Auth and MCP build triggers are independent; Auth was deployed first, then the existing MCP Worker was updated in place.
@@ -273,3 +273,13 @@ This section supersedes earlier PR #14 notes in this file that described local p
 | 2026-11-20 | Rollback reference | Previous Auth Worker version #4 `93411491-de13-4cd9-8d7e-d441d07ad674`, deployment `67a91b5b-9b1b-4ca0-8af6-b88a657dc543`. |
 
 The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. The GitHub PR remains separate from the production build; no merge to `main` was performed.
+
+
+## Deployment gate hardening — 2026-11-20
+
+- Re-inspected both live Cloudflare Build Worker configurations and their trigger records using read-only API calls.
+- Auth production trigger `76787337-ed7e-49da-897a-39f548a65b91`: deploy command is `npx cf deploy --prebuilt --mode production`; `--force` is absent.
+- MCP production trigger `593221cf-b17a-4506-979a-ebb7f4307c69`: deploy command is `npx cf deploy --prebuilt --mode production`; `--force` is absent.
+- Both triggers remain path-scoped to their respective application directories and package manifests, and both target `main`. No trigger settings were changed during this inspection.
+- Repository policy now prohibits persisting `--force` in automatic CI/Cloudflare Build triggers. A one-time migration exception requires separate explicit approval, a captured live version/metadata baseline, verified replacement artifact, and documented rollback; the flag must not remain in the trigger.
+- No Worker, deployment, preview, secret, binding, DNS record, or customer workspace was modified.
