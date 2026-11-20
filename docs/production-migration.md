@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-20
 
-**Status:** Production OAuth infrastructure deployed. An operator-confirmed read-only OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Further real-key testing remains NO-GO pending the six ordered gates in `docs/implementation-plan.md`; refresh/revocation lifecycle and disconnect/replacement UX remain outstanding.
+**Status:** Production OAuth infrastructure deployed. An operator-confirmed read-only OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Auth v8 now includes the merged scope-aware refresh-token correction. Further real-key testing remains NO-GO pending the ordered gates in `docs/implementation-plan.md`; client-side disconnect verification and user-facing credential replacement remain outstanding.
 
 ## Current production state — 2026-11-20
 
@@ -11,12 +11,12 @@
 | Cloudflare account subdomain | `kinan-api` |
 | Auth Worker | `syrianfatora-auth` |
 | Auth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
-| Auth version / deployment | v6 `2f25855b-9299-47a1-88f6-65bf04f48da9` / `34b83009-a63b-418b-ace6-a9365ad70cf3` (100% traffic) |
-| Auth immediate rollback | v5 `53dfd48f-5b83-49f9-bd8a-229255d82790` / `d66496cb-7e13-48a4-8c4d-433c8dfd560d` |
+| Auth version / deployment | v8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532` / `4bd65dcd-240e-44f7-b2db-c025a0b51a05` (100% traffic) |
+| Auth immediate rollback | v7 `5f9fe79d-1799-4a66-8f25-868f149dcd7a` / `d07905f9-b987-4946-88cf-8accd662c1d3` |
 | Existing MCP Worker | `syrianfatora-mcp` (migrated in place) |
 | MCP resource URL | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
-| MCP version / deployment | v10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` / `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic) |
-| MCP immediate rollback | v9 `ef5d0c42-9375-42b2-81e4-73b734707b22` / `d1f2fbf3-e4e6-46f6-bd3c-8283dc80ff0c` (rollback reintroduces the Preview metadata endpoint) |
+| MCP version / deployment | v11 `a1dcd66c-1a5c-48d1-bc1d-f63b1962d950` / `01fa136b-96b9-436d-be33-165390c6a099` (100% traffic; `IS_PREVIEW=false`) |
+| MCP immediate rollback | v10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` / `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic before v11; retains the Preview cleanup) |
 | MCP pre-migration baseline | v4 `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (captured before code migration; secret already present) |
 | OAuth KV | `syrianfatora-oauth-production`, `d19d9bd755c349f688cd55e299b8168f` |
 | SQLite Durable Object | `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
@@ -28,7 +28,7 @@
 
 The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` and `RATE_LIMITER` bound to the Auth Worker's SQLite Durable Object namespace. The Auth Worker has the production KV binding and the same HMAC secret. No custom domain or DNS record was changed.
 
-**Rollback note:** The immediate rollback targets are Auth v5 (`53dfd48f-5b83-49f9-bd8a-229255d82790`) and MCP v9 (`ef5d0c42-9375-42b2-81e4-73b734707b22`). MCP v9 predates the Preview cleanup and re-exposes the Preview metadata endpoint; if rollback is required, reapply the Preview gate before declaring the production interface clean. MCP v4 (`ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5`) remains the captured pre-migration baseline. Auth v3 was the first functional production release; v5 is the immediate known-good predecessor to current v6.
+**Rollback note:** The immediate rollback targets are Auth v7 (`5f9fe79d-1799-4a66-8f25-868f149dcd7a`) and MCP v10 (`8b7e8158-b175-44fe-98d5-4f151eef51f2`). MCP v10 retains the Preview cleanup. MCP v9 (`ef5d0c42-9375-42b2-81e4-73b734707b22`) predates that cleanup and re-exposes the Preview metadata endpoint; do not roll back to v9 without reapplying the Preview gate. MCP v4 (`ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5`) remains the captured pre-migration baseline.
 
 ### Verification
 
@@ -38,11 +38,11 @@ The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` a
 - MCP protected-resource metadata: HTTP 200 at `/.well-known/oauth-protected-resource/mcp`; advertises the Auth issuer.
 - MCP request with a deliberately invalid bearer token: HTTP 401.
 - GitHub Actions production smoke runs `44456841885` (initial cutover) and `44457599094` (after final MCP version 6 and preview-URL disablement) both completed successfully on 2026-11-19.
-- Auth unit tests: 41/41 pass on the deployed v6 source, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
-- MCP unit tests on `main`: 24/24 pass.
+- Auth unit tests: 43 pass on the merged Auth v8 source, including optional refresh-token consent, refresh-token rotation, grant isolation, revocation, SQLite Durable Object concurrency serialization, and provider-directed 429 cooldown.
+- MCP unit tests on `main`: 24 pass.
 - `npm audit --audit-level=high`: zero vulnerabilities for both packages using npm 10.9.2, matching Cloudflare Build.
 - **Completed separately:** an operator-confirmed production Authorization Code + PKCE smoke using two real Workspace keys (`KEY_1` and `KEY_2`), with `mcp:read` only and authenticated MCP calls. See the dedicated evidence section below.
-- **Still outstanding:** refresh-token lifecycle/rotation, client-side revocation behavior, and user-facing disconnect/replacement UX. No production write operations were tested.
+- **Still outstanding:** client/ChatGPT-side disconnect and revocation behavior, and user-facing disconnect/replacement UX. Provider-level refresh-token issuance, rotation, and revocation are implemented and covered by Auth tests. No production write operations were tested.
 
 
 
@@ -330,4 +330,4 @@ The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. T
 
 A source review confirmed that the API key is stored in provider-encrypted grant `props`, and token validation returns those properties only to the internal MCP Worker. Access-token revocation removes only that token; refresh-token revocation deletes the full grant and encrypted properties. Reauthorization creates an independent grant because no stable Workspace identifier is available; it does not automatically replace an earlier key.
 
-The deployed Auth v6 still has a mismatch between the consent UI and token behavior: its global refresh-token TTL can issue a refresh token even when optional `offline_access` was not approved. Draft PR #54 adds the scope-aware correction and regression tests (43/43 Auth tests passed locally). It is not merged or deployed. User-facing disconnect/replacement UX is not implemented, and ChatGPT's disconnect/revocation behavior is unverified. This is an additional reason further real Workspace-key testing remains NO-GO.
+**Superseded finding:** Auth v6 could issue a refresh token even when optional `offline_access` was not approved. PR #54 corrected this with a scope-aware token-exchange callback and added regression coverage. PR #54 is merged and the correction is deployed in Auth v8 (100% traffic). User-facing disconnect/replacement UX is still not implemented, and ChatGPT's disconnect/revocation behavior remains unverified. Further real Workspace-key testing remains NO-GO until the remaining ordered gates are closed.
