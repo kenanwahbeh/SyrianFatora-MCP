@@ -1,104 +1,80 @@
-# SyrianFatora MCP Resource Worker
+# MCP Resource Worker
 
-This package is the OAuth-protected resource server for the existing production SyrianFatora MCP service.
+The OAuth-protected MCP resource server for SyrianFatora. It preserves the existing production Worker identity, public endpoint, and 51-tool catalogue.
 
-## Production identity — do not change
+## Responsibilities
 
-- Cloudflare production Worker name: `syrianfatora-mcp`.
-- Public MCP endpoint: https://syrianfatora-mcp.kinan-api.workers.dev/mcp.
-- This is the existing MCP resource service, migrated in place.
-- Do not deploy a second MCP Worker as a replacement or use the Preview name in production.
-- Preserve the existing public MCP endpoint identity and all 51 tool definitions.
-- Current production version: `8b7e8158-b175-44fe-98d5-4f151eef51f2` (version 10).
-- Current deployment: `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic).
-- Immediate rollback version: `ef5d0c42-9375-42b2-81e4-73b734707b22` (version 9); deployment `d1f2fbf3-e4e6-46f6-bd3c-8283dc80ff0c`. **Warning:** version 9 re-exposes the Preview CIMD endpoint.
-- Previous rollback version captured before the migration: `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (version 4).
-- Production workers.dev route is enabled; public version-preview URLs are disabled.
+- Exposes the MCP endpoint and existing SyrianFatora tool catalogue.
+- Validates OAuth access tokens through the Auth Worker's `AUTH_SERVER` Service Binding.
+- Uses the upstream SyrianFatora API key only on the server side, from provider-encrypted grant properties.
+- Enforces `mcp:read` for MCP access and read operations.
+- Requires both `mcp:read` and `mcp:write` for create, update, and delete operations.
+- Preserves existing tool request/response semantics, including the payment-void reason requirement.
+- Applies bounded request handling and avoids returning the upstream API key in echoed responses.
 
-## What it does
+## Production identity
 
-- Wraps the MCP handler with Cloudflare Workers OAuth Provider v1 `OAuthResourceServer`.
-- Validates access tokens through the `AUTH_SERVER` Service Binding; token validation does not call the public Internet.
-- Receives validated grant properties from the provider and uses the upstream API key only in the server-side SyrianFatora Bearer header.
-- Preserves the existing 51 MCP tools and their request/response contract.
-- Requires `mcp:read` for MCP access and `mcp:write` for create, update, and delete operations.
-- Keeps the existing payment-void reason requirement.
-- Enforces a bounded MCP request body and redacts the upstream API key from any echoed upstream response.
-- Provides a minimal unauthenticated `/health` probe.
+- Worker: `syrianfatora-mcp`
+- MCP endpoint: https://syrianfatora-mcp.kinan-api.workers.dev/mcp
+- Authorization issuer: https://syrianfatora-auth.kinan-api.workers.dev
+- Internal Auth binding: `AUTH_SERVER` → `syrianfatora-auth`, entrypoint `SyrianFatoraAuth`
 
-## Production runtime configuration
+Do not rename this Worker, create a replacement MCP service, or point production configuration at a Preview Worker. Deployed version IDs, bindings, and rollback references are maintained only in the [production migration runbook](../../docs/production-migration.md).
 
-| Binding / variable | Production value |
-| --- | --- |
-| Worker name | `syrianfatora-mcp` |
-| `MCP_SERVER_URL` | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
-| `AUTH_SERVER_URL` | `https://syrianfatora-auth.kinan-api.workers.dev` |
-| `AUTH_SERVER` | Service Binding to Worker `syrianfatora-auth`, entrypoint `SyrianFatoraAuth` |
-| `RATE_LIMITER` | Durable Object `CredentialRateLimiter` in `syrianfatora-auth`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
-| `RATE_LIMIT_HMAC_SECRET` | Secret text; same random 48-byte value as the Auth Worker |
+## Upstream quota behavior
 
-The Cloudflare deployment output and live Worker settings confirm both the Service Binding and Durable Object binding. The MCP Worker has no local daily/monthly/per-key/per-grant usage quota bindings.
+SyrianFatora owns workspace API quota. The MCP Worker does not impose local per-key, per-grant, daily, or monthly request quotas and does not count normal MCP requests locally.
 
-## Scope enforcement
+A credential-scoped cooldown is stored only when SyrianFatora returns HTTP 429 with a valid `Retry-After` value. The provider-specified duration is used without a local fallback. The Worker does not automatically retry upstream requests. The HMAC credential fingerprint is not a workspace identifier or usage counter.
 
-| MCP operation | Required scope |
-| --- | --- |
-| initialize, ping, tools/list, read/list/get calls | `mcp:read` |
-| create/update/delete calls | `mcp:read` and `mcp:write` |
+## Development
 
-Cloudflare's requiredScopes metadata is advertised to clients; this Worker explicitly enforces scopes in its handler as well.
+Requirements: Node.js 20 or later and the package dependencies.
 
-## Provider-owned quota
+From this directory:
 
-SyrianFatora is the sole authority for workspace API quota. This Worker must not apply local per-credential request quotas, per-OAuth-grant quotas, or local daily/monthly caps. Normal MCP requests are not counted by a local usage limiter.
+```sh
+npm install
+npm run build:check
+npm test
+npm run dev
+```
 
-Before an upstream call, the Worker checks only whether SyrianFatora previously returned HTTP 429 with a valid `Retry-After` value for this credential. If so, it returns a controlled 429 with the provider-specified `Retry-After`. No local fallback duration is invented. If the provider did not supply a valid `Retry-After`, no local cooldown is created. The Worker never automatically retries upstream requests.
+The production deployment command is managed by the Cloudflare Build trigger. Do not deploy manually or use `--force` unless a separate production change has been explicitly approved.
 
-The credential HMAC fingerprint is used only to scope authorization anti-abuse and provider-directed cooldown state. It is not a workspace identity or quota counter.
+## Operator-run production OAuth smoke
 
-## Build, testing, and production verification
+Run:
 
-- `npm audit --audit-level=high`: zero vulnerabilities in the current dependency tree with npm 10.9.2.
-- `npm run build:check`: production Worker build succeeds without deployment.
-- `npm test`: 24 MCP tests pass.
-- Production smoke checks pass for MCP health, OAuth protected-resource metadata at `/.well-known/oauth-protected-resource/mcp`, 51 tools reported by health, and rejection of an invalid bearer token with HTTP 401.
-- **Real-key smoke verified:** the operator confirmed successful authenticated `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` (`per_page=1`) calls using OAuth sessions authorized with two real Workspace keys (`KEY_1` and `KEY_2`). No write operation was tested; key values and customer records are not recorded.
-- Refresh-token lifecycle, revocation, and user-facing disconnect/replacement remain separate outstanding checks.
-- Never use a production workspace for write-operation tests.
-
-## Authenticated production OAuth smoke test
-
-The repository includes a separate, operator-run end-to-end smoke test. It completes a real OAuth Authorization Code + PKCE flow against the deployed Auth Worker, receives the callback on a temporary loopback HTTP listener, exchanges the code for an access token, and uses that token against the deployed MCP Worker.
-
-Run it from this package directory with Node.js 20 or later:
-
-```bash
+```sh
 npm run smoke:oauth
 ```
 
-The script:
-1. Registers a public OAuth test client with the exact temporary loopback redirect URI.
-2. Prints an authorization URL. Open it in a browser and enter the SyrianFatora API key only on the official HTTPS Auth Worker page; approve only `mcp:read`.
-3. Captures the OAuth callback locally, validates `state`, and exchanges the authorization code using the PKCE verifier.
-4. Calls authenticated MCP `initialize`, `notifications/initialized`, and `tools/list`; verifies the 51-tool catalogue.
-5. Calls only `customers_list` with `per_page=1` and verifies a successful upstream HTTP response.
+The script performs Authorization Code + PKCE against the deployed Auth Worker. It opens a local loopback callback listener, prints an authorization URL, and asks the operator to enter the Workspace API key only on the first-party HTTPS authorization page. Approve `mcp:read` only.
 
-The test never requests `mcp:write`, never performs create/update/delete operations, and does not print or persist the access token, API key, or returned customer records. The API-key validation step in the Auth Worker and the final customer-list call both consume the provider's read quota. The script uses a fixed loopback port (`43127` by default) and caches only the public OAuth client ID and redirect URI in `~/.syrianfatora-smoke/client.json` (file mode `0600`); it does not cache tokens or API keys. It reuses that registration for up to 80 days and then creates a replacement. Each registration remains in Auth Worker KV until its configured TTL expires (currently 90 days); there is no client-unregistration endpoint in this integration. Override the callback port with `SMOKE_CALLBACK_PORT` or the local cache path with `SMOKE_CLIENT_CACHE` if needed.
+It then verifies:
 
-Optional environment overrides:
-- `AUTH_ORIGIN`: deployed authorization-server origin.
-- `MCP_ORIGIN`: deployed MCP resource-server origin.
-- `SMOKE_CALLBACK_PORT`: local callback port (default `43127`).
-- `SMOKE_CLIENT_CACHE`: local path for the non-secret OAuth client cache.
+1. Authorization-code exchange and Bearer access-token issuance.
+2. Authenticated MCP `initialize`.
+3. `notifications/initialized`.
+4. `tools/list` and the expected 51-tool catalogue.
+5. Read-only `customers_list` with `per_page=1`.
 
-This is intentionally a local/manual production verification, not a GitHub Actions job: the operator must approve the OAuth request and enter the API key in the browser. Do not put the API key or access token in GitHub Secrets, command-line arguments, source control, or CI logs. A successful run prints a final `PASS` line; failures print only bounded status/error information, not response bodies.
+The script does not request `mcp:write`, perform writes, or print/persist the API key, access token, or customer records. API-key validation and the customer-list call consume provider read quota.
 
-The client-cache serialization fix and mocked OAuth/MCP integration harness are merged in PR #51 and included in the 24-test MCP suite. The mock harness validates the script flow locally; it is not production OAuth evidence and does not use a real Workspace key.
+The script caches only the public OAuth client ID and redirect URI locally in `~/.syrianfatora-smoke/client.json` with restrictive file permissions. It does not cache credentials or tokens. The callback port defaults to `43127`.
 
-## Provider response headers
+Optional environment variables:
 
-The MCP response includes SyrianFatora's `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `Retry-After` values when present. Those provider values are authoritative. The MCP Worker does not calculate or replace workspace quota locally.
+- `AUTH_ORIGIN` — authorization-server origin.
+- `MCP_ORIGIN` — MCP resource-server origin.
+- `SMOKE_CALLBACK_PORT` — loopback callback port.
+- `SMOKE_CLIENT_CACHE` — local path for the non-secret client cache.
 
-## Preview deployment
+This is an operator-run production check, not a GitHub Actions job. The automated production workflow performs unauthenticated health/metadata checks and invalid-token rejection only. The local mocked integration test validates the script flow but is not evidence of a real production OAuth session.
 
-The isolated Preview Worker is separate from production and remains pinned to the `test/durable-object-atomicity` branch. The production Build trigger targets `main` and deploys the existing `syrianfatora-mcp` Worker in place without `--force`. Public version-preview URLs are disabled for production. PR #52 is merged and deployed: production `/oauth/client-metadata.json` returns 404 and the live `IS_PREVIEW` binding is `false`; the Preview CIMD document remains available only in the isolated Preview environment.
+The two-key production read-only smoke (`KEY_1` and `KEY_2`) is already recorded in the root README and production runbook. Further real-key tests remain NO-GO until release gates 1–5 are formally closed. Never test write operations against a real Workspace.
+
+## Preview
+
+Preview is isolated from production. Keep its Worker separate; do not remove Preview resources as part of production metadata cleanup. The production metadata endpoint `/oauth/client-metadata.json` is gated to return 404.
