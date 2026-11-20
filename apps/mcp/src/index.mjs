@@ -5,6 +5,7 @@ import {
 import { env } from "cloudflare:workers";
 import { handleMcpRequest } from "./handler.mjs";
 import { checkUpstreamCooldown, recordProviderCooldown } from "./rate-limit-client.mjs";
+import { previewClientMetadataResponse } from "./preview-metadata.mjs";
 
 const resourceServer = new OAuthResourceServer({
   resourceMetadata: {
@@ -20,6 +21,7 @@ const resourceServer = new OAuthResourceServer({
       }
 
       return handleMcpRequest(request, ctx.props, {
+        serverVersion: workerEnv.IS_PREVIEW === "true" ? "1.2.0-oauth-preview" : "1.2.0",
         requireWriteScope: () => ctx.auth.scope.includes("mcp:write")
           ? null
           : insufficientScope(ctx.auth, ["mcp:read", "mcp:write"]),
@@ -45,25 +47,12 @@ function addCors(response) {
   });
 }
 
-function clientMetadataResponse(url) {
-  return Response.json({
-    client_id: url.href,
-    client_name: "SyrianFatora Preview E2E Client",
-    redirect_uris: ["https://example.com/oauth/callback"],
-    response_types: ["code"],
-    grant_types: ["authorization_code", "refresh_token"],
-    token_endpoint_auth_method: "none",
-  }, {
-    headers: { "Cache-Control": "no-store" },
-  });
-}
-
 export default {
   async fetch(request, workerEnv, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === "/oauth/client-metadata.json") {
-      return addCors(clientMetadataResponse(url));
+      return addCors(previewClientMetadataResponse(url, workerEnv));
     }
 
     if (url.pathname === "/health") {

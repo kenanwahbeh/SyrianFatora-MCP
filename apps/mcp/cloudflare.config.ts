@@ -18,6 +18,7 @@ export default defineConfig(({ isPreview }) => ({
 			traces: { enabled: true, headSamplingRate: 1 },
 		},
 		env: {
+			IS_PREVIEW: bindings.text(isPreview ? "true" : "false"),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
 					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"

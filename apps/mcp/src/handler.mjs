@@ -158,6 +158,7 @@ function getToolParts(name) {
 export async function handleMcpRequest(request, props, {
   fetchImpl = fetch,
   requireWriteScope = () => true,
+  serverVersion = "1.2.0",
   checkUpstreamCooldown,
   onUpstreamRateLimited,
   maxRequestBytes = 1_048_576,
@@ -208,7 +209,7 @@ export async function handleMcpRequest(request, props, {
     return reply(id, {
       protocolVersion: supported.includes(requested) ? requested : "2025-03-26",
       capabilities: { tools: { listChanged: false } },
-      serverInfo: { name: "syrianfatora-mcp", version: "1.2.0-oauth-preview" },
+      serverInfo: { name: "syrianfatora-mcp", version: serverVersion },
     });
   }
   if (message.method === "ping") return reply(id, {});
