@@ -1,7 +1,7 @@
 # SyrianFatora credential separation and revocation review
 
 **Reviewed:** 2026-11-20
-**Status:** Source review completed; the optional-refresh-token correction is prepared in PR #54. User-facing disconnect and credential-replacement management remain outstanding.
+**Status:** PR #54 is merged and its correction is deployed in Auth Worker v8. Provider-level token lifecycle behavior is covered by isolated tests. User-facing disconnect and credential-replacement management remain outstanding.
 
 ## Scope and evidence
 
@@ -19,7 +19,7 @@ This review covers the Auth Worker, MCP resource handler, the pinned `@cloudflar
 
 The consent page presents `offline_access` as optional, but the previous global `refreshTokenTTL` setting caused the provider to issue a refresh token even when the user had not approved that scope. That did not match the consent UI.
 
-PR #54 adds a token-exchange callback that sets `refreshTokenTTL: 0` for an authorization-code exchange unless `offline_access` is present in the effective requested scopes. The isolated test verifies that a `mcp:read`-only grant receives no refresh token and expires with its access token. Existing tests verify that an `offline_access` grant can receive and rotate refresh tokens.
+PR #54 was merged on 2026-11-20. Auth Worker v8 includes a token-exchange callback that sets `refreshTokenTTL: 0` for an authorization-code exchange unless `offline_access` is present in the effective requested scopes. The isolated test verifies that a `mcp:read`-only grant receives no refresh token and expires with its access token. Existing tests verify that an `offline_access` grant can receive and rotate refresh tokens.
 
 ## Revocation semantics
 
@@ -38,7 +38,7 @@ The Auth discovery document advertises the RFC 7009 revocation endpoint at `/oau
 
 ## Remaining acceptance work
 
-1. Review and merge PR #54; keep the Auth Worker unchanged in production until a separate deployment approval.
-2. Decide whether a supported stable Workspace identifier exists before designing cross-grant replacement. Do not derive Workspace identity from the API key itself or from a guessed endpoint.
-3. Define and document the supported user-facing disconnect/replacement flow, including the behavior when the client does not send a refresh-token revocation request.
-4. Keep the real Workspace-key test blocked until the six ordered pre-Workspace gates are closed.
+1. Decide whether a supported stable Workspace identifier exists before designing cross-grant replacement. Do not derive Workspace identity from the API key itself or from a guessed endpoint.
+2. Define and document the supported user-facing disconnect/replacement flow, including the behavior when the client does not send a refresh-token revocation request.
+3. Verify ChatGPT/client-side RFC 7009 revocation behavior without using a real Workspace key.
+4. Keep further real Workspace-key tests blocked until the ordered release gates are formally closed.
