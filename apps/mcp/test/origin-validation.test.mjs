@@ -30,3 +30,17 @@ test("rejects unconfigured, malformed, opaque and non-canonical origins", () => 
   }), false);
   assert.equal(isAllowedMcpOrigin(request("not an origin")), false);
 });
+
+test("rejects non-loopback HTTP origins even when explicitly configured", () => {
+  assert.equal(isAllowedMcpOrigin(
+    request("http://chat.example.test"),
+    { MCP_ALLOWED_ORIGINS: "http://chat.example.test" },
+  ), false);
+});
+
+test("allows explicitly configured loopback HTTP origins for local development", () => {
+  assert.equal(isAllowedMcpOrigin(
+    request("http://localhost:3000"),
+    { MCP_ALLOWED_ORIGINS: "http://localhost:3000" },
+  ), true);
+});
