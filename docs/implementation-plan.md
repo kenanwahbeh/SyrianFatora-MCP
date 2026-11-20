@@ -2,19 +2,19 @@
 
 **Last updated:** 2026-11-20
 
-**Release status:** **NO-GO** for further real-key testing until gates 1–5 are formally closed and reviewed.
+**Release status:** **NO-GO** for further real-key testing until gates 1–5 are formally closed and reviewed. The Auth v8 lifecycle correction is deployed; gate 5 remains open only for client-side disconnect verification and user-facing credential replacement.
 **Source of truth for deployed IDs and production probes:** [production migration runbook](production-migration.md).
 
 ## Deployed production baseline
 
 | Component | Current production state |
 | --- | --- |
-| Auth Worker | `syrianfatora-auth`, version #6 `2f25855b-9299-47a1-88f6-65bf04f48da9`, deployment `34b83009-a63b-418b-ace6-a9365ad70cf3` |
-| MCP Worker | `syrianfatora-mcp`, version #10 `8b7e8158-b175-44fe-98d5-4f151eef51f2`, deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` |
+| Auth Worker | `syrianfatora-auth`, version #8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532`, deployment `4bd65dcd-240e-44f7-b2db-c025a0b51a05` (100% traffic) |
+| MCP Worker | `syrianfatora-mcp`, version #11 `a1dcd66c-1a5c-48d1-bc1d-f63b1962d950`, deployment `01fa136b-96b9-436d-be33-165390c6a099` (100% traffic; `IS_PREVIEW=false`) |
 | MCP endpoint | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
 | OAuth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
 | MCP catalogue | 51 tools |
-| Main-branch tests | Auth 41/41; MCP 24/24 |
+| Main-branch tests | Auth 43; MCP 24 |
 | Dependency audit | 0 high-severity vulnerabilities |
 
 Production health, OAuth discovery, protected-resource metadata, MCP tool count, and invalid-token rejection have passed. In addition, the operator confirmed that a production read-only OAuth Authorization Code + PKCE smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and `customers_list`.
@@ -31,6 +31,7 @@ Production health, OAuth discovery, protected-resource metadata, MCP tool count,
 - [x] Verify the SQLite Durable Object concurrency behavior and provider-directed cooldown tests.
 - [x] Deploy the OAuth consent retry fix to Auth v6; PR #49 is merged to `main`.
 - [x] Verify the live Auth and MCP production health/discovery probes and the production build pipeline.
+- [x] Merge the scope-aware refresh-token consent correction in PR #54 and deploy it to Auth Worker v8; Auth tests cover optional `offline_access`, rotation, grant isolation, and revocation.
 
 ## Ordered pre-Workspace gates
 
@@ -77,11 +78,12 @@ Complete these gates in this exact order. The historical two-key smoke is docume
 - [x] Confirmed the Workspace key is stored in provider-encrypted grant `props` and returned only to the internal MCP resource Worker after token validation; raw keys are not used as limiter identifiers.
 - [x] Confirmed revocation semantics: access-token revocation removes that token only; refresh-token revocation removes the full grant and encrypted props.
 - [x] Confirmed each authorization is an independent grant. Reauthorizing the same OAuth client does not replace an earlier key because no stable Workspace identifier is available.
-- [x] Identified a consent mismatch: the deployed Auth v6 can issue a refresh token even when `offline_access` was not approved. A correction and regression tests are prepared in draft PR #54.
-- [ ] Merge PR #54 after CI/review; do not deploy it without separate approval.
-- [ ] Decide and document the supported disconnect/replacement procedure. User-facing disconnect UI is absent, and whether ChatGPT sends RFC 7009 revocation on disconnect is unverified.
+- [x] Identified and corrected the mismatch between optional `offline_access` consent and refresh-token issuance.
+- [x] Merge PR #54 (`75c8f0616f8eea1526d4bfda559a8fc9ce456525`); Auth Worker v8 is deployed with 100% traffic.
+- [x] Add isolated regression coverage for no-refresh when `offline_access` is absent, refresh-token rotation, grant isolation, access-token revocation, and full grant revocation.
+- [ ] Decide and implement the supported user-facing disconnect/replacement procedure. Whether ChatGPT sends RFC 7009 revocation on disconnect remains unverified.
 
-**Evidence:** PR #54 — https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/54 (draft; not merged or deployed). Detailed source review is included in that PR.
+**Evidence:** [PR #54](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/54) is merged. Cloudflare Auth v8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532`, deployment `4bd65dcd-240e-44f7-b2db-c025a0b51a05` (100% traffic). The deployment was created automatically after the merge; this documentation task did not deploy or modify Workers.
 
 ### 6. Real OAuth test — read-only only
 
