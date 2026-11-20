@@ -1,3 +1,5 @@
+import { validateToolArguments } from "./input-validation.mjs";
+
 const BASE = "https://syrianfatora.com/api/public/v1";
 
 const RESOURCES = {
@@ -243,6 +245,8 @@ export async function handleMcpRequest(request, props, {
   if (!args || typeof args !== "object" || Array.isArray(args)) {
     return toolError(id, "Tool arguments must be a JSON object.");
   }
+  const validationError = validateToolArguments(tool, args);
+  if (validationError) return toolError(id, `Invalid tool arguments: ${validationError}`);
 
   const method = action === "list" || action === "get"
     ? "GET"
