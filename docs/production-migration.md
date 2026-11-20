@@ -370,3 +370,13 @@ The Cloudflare deployment inspection confirms version assignment and traffic per
 - Changed the upstream fetch to `redirect: "manual"` for this diagnostic build so a redirect is returned as a 3xx response rather than silently followed or rejected. The tool result exposes only the HTTP status and bounded response body; the diagnostic event records only the status and a validated destination hostname, never the Location URL or query string.
 - Added regression tests for message classification, redirect handling, and the absence of secret/query leakage.
 - This second-round diagnostic build is intended for one read-only `KEY_1` probe. No write test, other key, secret, binding, DNS, or Durable Object setting is in scope.
+
+### Second-round deployment and probe outcome — 2026-11-21
+
+- Branch commit `99346f6` was pushed to `origin/test/live-mcp-real-keys`. MCP unit tests passed 45/45; `npm run build:check` and `git diff --check` succeeded.
+- The local `cf deploy` CLI could build but had no local authentication token. The already-authorized Cloudflare API connection was used for the same targeted upload; no API token was copied to the VPS.
+- Uploaded MCP Worker version #15: `5469a3d0-9b01-4803-ad00-4c6813df3e2c`; deployment `6d82978e-52cd-4442-a05c-cc9d8b595668`; verified 100% traffic assigned to version #15.
+- The upload used `keep_bindings: ["secret_text"]`; a read-only version inspection confirmed the existing `RATE_LIMIT_HMAC_SECRET` binding, service binding, Durable Object binding, and production text bindings remain present. The secret value was not read or changed.
+- One `KEY_1` read-only `customers_list` probe was attempted after upload and failed with the generic client error. Its structured log at `2026-11-20T22:52:46.014Z` identifies Worker version #14 (`5367ee50-0746-4091-b5aa-b342bef7611e`), not the newly assigned version #15. The request was served by the previous version during deployment propagation; therefore this probe does not validate the second-round code.
+- No `mcp.upstream_redirect` event was recorded. Because the request reached version #14, this is not evidence about redirect behavior in version #15. No additional live-key request or workspace write was performed.
+- Next action requires one further explicitly approved read-only `KEY_1` probe after confirming version #15 is serving requests. Do not repeat automatically.
