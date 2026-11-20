@@ -380,3 +380,11 @@ The Cloudflare deployment inspection confirms version assignment and traffic per
 - One `KEY_1` read-only `customers_list` probe was attempted after upload and failed with the generic client error. Its structured log at `2026-11-20T22:52:46.014Z` identifies Worker version #14 (`5367ee50-0746-4091-b5aa-b342bef7611e`), not the newly assigned version #15. The request was served by the previous version during deployment propagation; therefore this probe does not validate the second-round code.
 - No `mcp.upstream_redirect` event was recorded. Because the request reached version #14, this is not evidence about redirect behavior in version #15. No additional live-key request or workspace write was performed.
 - Next action requires one further explicitly approved read-only `KEY_1` probe after confirming version #15 is serving requests. Do not repeat automatically.
+
+### Second-round read-only probe completed — 2026-11-21
+
+- After confirming deployment `6d82978e-52cd-4442-a05c-cc9d8b595668` still assigned 100% traffic to version #15 (`5469a3d0-9b01-4803-ad00-4c6813df3e2c`), ran exactly one `KEY_1` read-only diagnostic: OAuth authorization, MCP initialize, tools/list (51), and `customers_list` with `per_page: 1`.
+- Result: PASS; process exited 0. OAuth grant cleanup completed. No customer values or credential material were printed. No write tool was invoked.
+- Cloudflare invocation logs for the probe show the MCP requests were served by version #15, with successful Worker outcomes. No `mcp.upstream_failure` or `mcp.upstream_redirect` event was recorded for this probe.
+- This confirms the read path worked on the diagnostic build. It does **not** prove the original transport failure was caused by redirect handling: the prior failures occurred on version #14, and the second-round probe succeeded without a redirect diagnostic. The original failure may have been transient or environmental; root cause remains unconfirmed.
+- Do not run more live-key probes or write tests without separate approval. Keep version #15 in place while reviewing whether to retain or remove the temporary diagnostic instrumentation in a separately approved change.
