@@ -307,3 +307,70 @@ test("records the provider Retry-After when upstream returns 429", async () => {
   assert.equal(body.result.isError, true);
   assert.equal(JSON.parse(body.result.content[0].text).status, 429);
 });
+
+
+test("validates tool arguments against the published input schema", async () => {
+  let called = false;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: { query: { per_page: 0 } },
+  }), props, {
+    checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async () => { called = true; return Response.json({}); },
+  });
+  const body = await json(response);
+
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /per_page is below the minimum/);
+  assert.equal(called, false);
+});
+
+test("rejects undeclared top-level tool arguments and invalid body types", async () => {
+  const extra = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: { query: {}, unexpected: true },
+  }), props);
+  assert.match((await json(extra)).result.content[0].text, /unsupported property: unexpected/);
+
+  const invalidBody = await handleMcpRequest(rpc("tools/call", {
+    name: "invoices_create",
+    arguments: { body: [] },
+  }), props, { requireWriteScope: () => null });
+  assert.match((await json(invalidBody)).result.content[0].text, /body must be object/);
+});
+
+test("rejects unsupported MCP protocol versions during initialize", async () => {
+  const response = await handleMcpRequest(rpc("initialize", {
+    protocolVersion: "2030-01-01",
+  }), props);
+  assert.equal(response.status, 400);
+  assert.equal((await json(response)).error.code, -32600);
+});
+
+test("rejects unsupported MCP-Protocol-Version headers on subsequent requests", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": "2030-01-01",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "ping", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 400);
+  assert.equal((await json(response)).error.code, -32600);
+});
+
+test("accepts a supported MCP-Protocol-Version header after initialization", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": "2024-11-05",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "ping", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await json(response)).result, {});
+});
