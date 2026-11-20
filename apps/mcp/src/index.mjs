@@ -3,7 +3,7 @@ import {
   insufficientScope,
 } from "@cloudflare/workers-oauth-provider";
 import { env } from "cloudflare:workers";
-import { handleMcpRequest, validateMcpOrigin } from "./handler.mjs";
+import { handleMcpRequest } from "./handler.mjs";
 import { isAllowedMcpOrigin } from "./origin-validation.mjs";
 import { checkUpstreamCooldown, recordProviderCooldown } from "./rate-limit-client.mjs";
 import { previewClientMetadataResponse } from "./preview-metadata.mjs";
@@ -23,6 +23,7 @@ const resourceServer = new OAuthResourceServer({
 
       return handleMcpRequest(request, ctx.props, {
         serverVersion: workerEnv.IS_PREVIEW === "true" ? "1.2.0-oauth-preview" : "1.2.0",
+        allowedOrigins: workerEnv.MCP_ALLOWED_ORIGINS,
         requireWriteScope: () => ctx.auth.scope.includes("mcp:write")
           ? null
           : insufficientScope(ctx.auth, ["mcp:read", "mcp:write"]),
@@ -38,7 +39,7 @@ function addCors(response, request, workerEnv) {
   const headers = new Headers(response.headers);
   const requestOrigin = request?.headers.get("Origin");
   if (requestOrigin === null || requestOrigin === undefined) headers.set("Access-Control-Allow-Origin", "*");
-  else if (validateMcpOrigin(request, workerEnv?.MCP_ALLOWED_ORIGINS)) {
+  else if (isAllowedMcpOrigin(request, workerEnv)) {
     headers.set("Access-Control-Allow-Origin", requestOrigin);
     headers.append("Vary", "Origin");
   }
@@ -74,11 +75,7 @@ export default {
       return addCors(new Response("Forbidden origin.", {
         status: 403,
         headers: { "Cache-Control": "no-store" },
-      }));
-    }
-
-    if (url.pathname === "/mcp" && !validateMcpOrigin(request, workerEnv.MCP_ALLOWED_ORIGINS)) {
-      return addCors(new Response("Forbidden origin.", { status: 403 }), request, workerEnv);
+      }), request, workerEnv);
     }
 
     if (request.method === "OPTIONS") {
