@@ -22,7 +22,7 @@
 
 The upstream API key is stored in provider-encrypted grant properties and returned only to the internal MCP resource Worker after successful token validation. Each authorization has a random, per-grant subject; the current read-only validation response does not provide a stable Workspace identifier, so reauthorization creates a separate grant rather than replacing an earlier one.
 
-**Current lifecycle gap:** Auth v6 has a global refresh-token TTL, so it may issue refresh tokens even when the consent page's optional `offline_access` scope was not approved. Draft PR #54 adds a callback to issue refresh tokens only when the client requested and the user approved that scope. It also tests the distinction between access-token revocation and full refresh-token/grant revocation. This correction is not merged or deployed; do not run additional real-key tests until it is reviewed and the ordered gates are closed.
+**Refresh-token consent correction deployed:** PR #54 is merged, and Auth Worker v8 includes a token-exchange callback that suppresses refresh-token issuance unless `offline_access` is in the effective requested scope. Auth tests cover the no-refresh case, refresh-token rotation, grant isolation, and revocation semantics. This closes the code defect; it does not complete client-side disconnect verification or user-facing credential management.
 
 - Collect the upstream key only on the first-party HTTPS authorization page.
 - Validate credentials with the harmless read-only `GET /customers?per_page=1` endpoint.
@@ -66,9 +66,9 @@ SyrianFatora response headers `X-RateLimit-Limit` and `X-RateLimit-Remaining`, t
 
 ## Testing and production evidence
 
-The historical PR #14 test exception was superseded by the later SQLite-backed Durable Object test suite. On `main`, the Auth suite passes 41/41 tests, including concurrent authorization-attempt serialization; the MCP suite passes 24/24 tests. Both Cloudflare Build triggers run `npm audit --audit-level=high`, `npm run build:check`, and `node --test` before deployment. The current deployed Auth and MCP versions and their health/discovery probes are recorded in `docs/production-migration.md`.
+The historical PR #14 test exception was superseded by the later SQLite-backed Durable Object test suite. On `main`, the Auth suite passes 43 tests, including optional refresh-token consent, rotation, grant isolation, revocation, and concurrent authorization-attempt serialization; the MCP suite passes 24 tests. Both Cloudflare Build triggers run `npm audit --audit-level=high`, `npm run build:check`, and `node --test` before deployment. The current deployed Auth and MCP versions and their health/discovery probes are recorded in `docs/production-migration.md`.
 
-A separate operator-confirmed production read-only OAuth smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), using Authorization Code + PKCE, `mcp:read`, authenticated MCP initialization/tool discovery, and `customers_list` (`per_page=1`). This evidence does not verify refresh-token rotation, client-side revocation, or disconnect/replacement UX. Because gates 1–5 are not all formally closed, further real-key testing remains NO-GO. No production write-operation tests are allowed.
+A separate operator-confirmed production read-only OAuth smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), using Authorization Code + PKCE, `mcp:read`, authenticated MCP initialization/tool discovery, and `customers_list` (`per_page=1`). This historical smoke predates the Auth v8 lifecycle correction. The merged and deployed Auth v8 code is covered by isolated tests, but client/ChatGPT-side revocation behavior and disconnect/replacement UX remain unverified. Because gates 1–5 are not all formally closed, further real-key testing remains NO-GO. No production write-operation tests are allowed.
 
 ## Incident response
 
