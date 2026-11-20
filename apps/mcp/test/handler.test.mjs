@@ -222,7 +222,7 @@ test("payment void still requires a reason", async () => {
   const body = await json(response);
 
   assert.equal(body.result.isError, true);
-  assert.equal(body.result.content[0].text, "A void reason of 3–500 characters is required.");
+  assert.match(body.result.content[0].text, /arguments\.reason is too short/);
   assert.equal(called, false);
 });
 
