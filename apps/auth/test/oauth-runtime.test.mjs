@@ -753,6 +753,9 @@ test("revoking a refresh token revokes the grant and blocks further refresh", as
   assert.equal(revoked.status, 200, await revoked.clone().text());
   assert.equal(await kv.get(`grant:${userId}:${grantId}`, { type: "json" }), null, "refresh-token revocation deletes the grant and encrypted props");
 
+  const accessAfterGrantRevoke = await resourceValidate(tokens.access_token);
+  assert.equal(accessAfterGrantRevoke.status, 401, "grant revocation also invalidates the associated access token");
+
   const refreshAfterRevoke = await refreshToken(client, tokens.refresh_token);
   assert.equal(refreshAfterRevoke.status, 400, await refreshAfterRevoke.clone().text());
   const error = await refreshAfterRevoke.json();
