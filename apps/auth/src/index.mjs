@@ -24,6 +24,13 @@ const authorizationServer = new OAuthAuthorizationServer({
   accessTokenTTL: Number(env.ACCESS_TOKEN_TTL_SECONDS ?? 3600),
   refreshTokenTTL: Number(env.REFRESH_TOKEN_TTL_SECONDS ?? 2592000),
   clientRegistrationTTL: Number(env.CLIENT_REGISTRATION_TTL_SECONDS ?? 7776000),
+  // The consent page presents offline access as optional. Do not issue a refresh
+  // token unless the client requested and the user approved that scope.
+  tokenExchangeCallback: async ({ grantType, requestedScope }) => {
+    if (grantType === "authorization_code" && !requestedScope.includes("offline_access")) {
+      return { refreshTokenTTL: 0 };
+    }
+  },
 });
 
 function securityHeaders(headers = new Headers()) {
@@ -165,7 +172,9 @@ async function authorize(request, workerEnv) {
   }
 
   // The provider encrypts props at rest and returns them only to the resource server.
-  // This random subject identifies this grant; it is not an upstream account identifier.
+  // No stable workspace identifier is available from the current read-only
+  // validation response. Keep every authorization isolated; reauthorization does
+  // not implicitly replace another grant's credential.
   const grantSubject = crypto.randomUUID();
   const { redirectTo } = await oauth.completeAuthorization({
     request: approved.request,

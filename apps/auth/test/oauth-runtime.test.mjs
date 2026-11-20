@@ -381,18 +381,20 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"], apiKe
   return response;
 }
 
-async function exchangeCode(client, code, verifier) {
+async function exchangeCode(client, code, verifier, scope) {
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: REDIRECT_URI,
+    client_id: client.client_id,
+    code_verifier: verifier,
+    resource: MCP_RESOURCE,
+  });
+  if (scope) body.set("scope", scope);
   return request("/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: client.client_id,
-      code_verifier: verifier,
-      resource: MCP_RESOURCE,
-    }),
+    body,
   });
 }
 
@@ -547,6 +549,38 @@ async function revokeToken(client, token, hint = "refresh_token") {
   });
 }
 
+test("refresh tokens are not issued unless offline_access was approved", async () => {
+  const client = await registerPublicClient();
+  const verifier = "runtime-read-only-no-refresh-verifier-long-enough";
+  const { handle, cookie } = await beginAuthorization(client, verifier, "mcp:read");
+  const approval = await approveAuthorization(handle, cookie, ["mcp:read"]);
+  const code = new URL(approval.headers.get("Location")).searchParams.get("code");
+  assert.ok(code);
+
+  const issued = await exchangeCode(client, code, verifier);
+  assert.equal(issued.status, 200, await issued.clone().text());
+  const tokens = await issued.json();
+  assert.equal(tokens.scope, "mcp:read");
+  assert.equal(tokens.refresh_token, undefined);
+
+  const [userId, grantId] = tokens.access_token.split(":");
+  const kv = await miniflare.getKVNamespace("OAUTH_KV");
+  const grant = await kv.get(`grant:${userId}:${grantId}`, { type: "json" });
+  assert.ok(grant, "the short-lived grant should exist while its access token is valid");
+  const now = Math.floor(Date.now() / 1000);
+  assert.ok(grant.expiresAt <= now + 60, "without offline_access the grant expires with the access token");
+
+  const secondVerifier = "runtime-client-downscope-verifier-long-enough";
+  const secondConsent = await beginAuthorization(client, secondVerifier, "mcp:read offline_access");
+  const secondApproval = await approveAuthorization(secondConsent.handle, secondConsent.cookie, ["mcp:read", "offline_access"]);
+  const secondCode = new URL(secondApproval.headers.get("Location")).searchParams.get("code");
+  const downscoped = await exchangeCode(client, secondCode, secondVerifier, "mcp:read");
+  assert.equal(downscoped.status, 200, await downscoped.clone().text());
+  const downscopedTokens = await downscoped.json();
+  assert.equal(downscopedTokens.scope, "mcp:read");
+  assert.equal(downscopedTokens.refresh_token, undefined, "a client that does not request offline_access receives no refresh token even when the user approved it");
+});
+
 test("access and refresh tokens expire and resource-server validation reflects revocation", async () => {
   const client = await registerPublicClient();
   const verifier = "runtime-lifecycle-verifier-that-is-long-enough";
@@ -612,13 +646,48 @@ test("resource-server validation isolates grants by their stored upstream creden
   assert.equal(dataB.props.upstreamApiKey, TEST_KEYS[1]);
   assert.notEqual(dataA.props.grantSubject, dataB.props.grantSubject);
 
+  const [userIdA, grantIdA] = tokensA.access_token.split(":");
+  const kv = await miniflare.getKVNamespace("OAUTH_KV");
+  const grantBeforeAccessRevoke = await kv.get(`grant:${userIdA}:${grantIdA}`, { type: "json" });
+  assert.ok(grantBeforeAccessRevoke, "the encrypted grant exists before access-token revocation");
+
   const revoked = await revokeToken(clientA, tokensA.access_token, "access_token");
   assert.equal(revoked.status, 200, await revoked.clone().text());
+  const grantAfterAccessRevoke = await kv.get(`grant:${userIdA}:${grantIdA}`, { type: "json" });
+  assert.ok(grantAfterAccessRevoke, "revoking an access token alone does not revoke the grant; its short TTL remains authoritative");
 
   const revokedA = await resourceValidate(tokensA.access_token);
   const stillValidB = await resourceValidate(tokensB.access_token);
   assert.equal(revokedA.status, 401, "revoked tenant token must be rejected");
   assert.equal(stillValidB.status, 200, "the other tenant token must remain valid");
+});
+
+test("reauthorizing the same OAuth client creates an independent grant instead of replacing the prior key", async () => {
+  const client = await registerPublicClient();
+  const verifierA = "runtime-replacement-a-verifier-long-enough";
+  const verifierB = "runtime-replacement-b-verifier-long-enough";
+
+  const consentA = await beginAuthorization(client, verifierA, "mcp:read offline_access");
+  const approvalA = await approveAuthorization(consentA.handle, consentA.cookie, ["mcp:read", "offline_access"], TEST_KEYS[0]);
+  const codeA = new URL(approvalA.headers.get("Location")).searchParams.get("code");
+  const issuedA = await exchangeCode(client, codeA, verifierA);
+  assert.equal(issuedA.status, 200, await issuedA.clone().text());
+  const tokensA = await issuedA.json();
+
+  const consentB = await beginAuthorization(client, verifierB, "mcp:read offline_access");
+  const approvalB = await approveAuthorization(consentB.handle, consentB.cookie, ["mcp:read", "offline_access"], TEST_KEYS[1]);
+  const codeB = new URL(approvalB.headers.get("Location")).searchParams.get("code");
+  const issuedB = await exchangeCode(client, codeB, verifierB);
+  assert.equal(issuedB.status, 200, await issuedB.clone().text());
+  const tokensB = await issuedB.json();
+
+  const dataA = await resourceValidate(tokensA.access_token);
+  const dataB = await resourceValidate(tokensB.access_token);
+  assert.equal(dataA.status, 200);
+  assert.equal(dataB.status, 200);
+  assert.equal((await dataA.json()).props.upstreamApiKey, TEST_KEYS[0]);
+  assert.equal((await dataB.json()).props.upstreamApiKey, TEST_KEYS[1]);
+  assert.notEqual(tokensA.access_token.split(":")[0], tokensB.access_token.split(":")[0]);
 });
 
 test("refresh tokens rotate and the previous refresh token is rejected", async () => {
@@ -676,8 +745,16 @@ test("revoking a refresh token revokes the grant and blocks further refresh", as
   const tokens = await issued.json();
   assert.ok(tokens.refresh_token);
 
+  const [userId, grantId] = tokens.refresh_token.split(":");
+  const kv = await miniflare.getKVNamespace("OAUTH_KV");
+  assert.ok(await kv.get(`grant:${userId}:${grantId}`, { type: "json" }));
+
   const revoked = await revokeToken(client, tokens.refresh_token);
   assert.equal(revoked.status, 200, await revoked.clone().text());
+  assert.equal(await kv.get(`grant:${userId}:${grantId}`, { type: "json" }), null, "refresh-token revocation deletes the grant and encrypted props");
+
+  const accessAfterGrantRevoke = await resourceValidate(tokens.access_token);
+  assert.equal(accessAfterGrantRevoke.status, 401, "grant revocation also invalidates the associated access token");
 
   const refreshAfterRevoke = await refreshToken(client, tokens.refresh_token);
   assert.equal(refreshAfterRevoke.status, 400, await refreshAfterRevoke.clone().text());
