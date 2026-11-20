@@ -2,7 +2,7 @@ import { validateToolArguments } from "./input-validation.mjs";
 import { isAllowedMcpOrigin } from "./origin-validation.mjs";
 
 const BASE = "https://syrianfatora.com/api/public/v1";
-const SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"];
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"];
 
 const RESOURCES = {
   customers: ["list", "get", "create"],
@@ -211,7 +211,7 @@ export async function handleMcpRequest(request, props, {
   if (message.method !== "initialize") {
     const protocolVersion = request.headers.get("MCP-Protocol-Version") ?? "2025-03-26";
     if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
-      return rpcError(id, -32600, "Unsupported MCP-Protocol-Version. Supported versions: 2025-03-26, 2024-11-05.", 400);
+      return rpcError(id, -32600, "Unsupported MCP-Protocol-Version. Supported versions: 2025-11-25, 2025-03-26, 2024-11-05.", 400);
     }
   }
   if (message.method === "notifications/initialized" || message.method === "notifications/cancelled") {
@@ -219,11 +219,11 @@ export async function handleMcpRequest(request, props, {
   }
   if (message.method === "initialize") {
     const requested = message.params && message.params.protocolVersion;
-    if (!SUPPORTED_PROTOCOL_VERSIONS.includes(requested)) {
-      return rpcError(id, -32600, "Unsupported protocol version. Supported versions: 2025-03-26, 2024-11-05.", 400);
-    }
+    const negotiatedVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
+      ? requested
+      : SUPPORTED_PROTOCOL_VERSIONS[0];
     return reply(id, {
-      protocolVersion: requested,
+      protocolVersion: negotiatedVersion,
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "syrianfatora-mcp", version: serverVersion },
     });
