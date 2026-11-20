@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-20
 
-**Status:** Production OAuth infrastructure deployed. Real Workspace-key OAuth and authenticated MCP tool execution remain NO-GO pending the six ordered gates in `docs/implementation-plan.md`.
+**Status:** Production OAuth infrastructure deployed. An operator-confirmed read-only OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Further real-key testing remains NO-GO pending the six ordered gates in `docs/implementation-plan.md`; refresh/revocation lifecycle and disconnect/replacement UX remain outstanding.
 
 ## Current production state — 2026-11-20
 
@@ -41,7 +41,8 @@ The MCP Worker has `AUTH_SERVER` bound to `syrianfatora-auth#SyrianFatoraAuth` a
 - Auth unit tests: 41/41 pass on the deployed v6 source, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown.
 - MCP unit tests on `main`: 24/24 pass.
 - `npm audit --audit-level=high`: zero vulnerabilities for both packages using npm 10.9.2, matching Cloudflare Build.
-- **Still outstanding:** a real Workspace-key Authorization Code + PKCE flow, token issuance/refresh, and an authenticated read-only MCP tool call. No real key was shared or used. No production write operations were tested.
+- **Completed separately:** an operator-confirmed production Authorization Code + PKCE smoke using two real Workspace keys (`KEY_1` and `KEY_2`), with `mcp:read` only and authenticated MCP calls. See the dedicated evidence section below.
+- **Still outstanding:** refresh-token lifecycle/rotation, client-side revocation behavior, and user-facing disconnect/replacement UX. No production write operations were tested.
 
 
 
@@ -291,7 +292,7 @@ Read-only post-deployment probes on 2026-11-20 returned:
 - Auth OAuth discovery: expected issuer, authorization/token endpoints, protected resource, and scopes.
 - MCP `/health`: `ok: true`, `toolCount: 51`.
 
-These probes do not establish a valid Workspace-key OAuth session or authenticated MCP tool call.
+These unauthenticated probes alone do not establish a Workspace-key OAuth session; the separate two-key authenticated smoke evidence is recorded below.
 
 ## Production Preview artifact cleanup — 2026-11-20
 
@@ -307,12 +308,26 @@ Post-deployment checks confirmed:
 
 The isolated Preview Worker and its CIMD test document remain intact. **Rollback warning:** immediate rollback version #9 predates PR #52 and will re-expose the Preview metadata endpoint; if rollback is required, track and reapply the Preview gate before declaring the production interface clean.
 
+## Operator-confirmed two-key production OAuth smoke — 2026-11-20
+
+The operator confirmed that the deployed production OAuth flow was successfully exercised with two real SyrianFatora Workspace keys, referred to here only as `KEY_1` and `KEY_2`. The actual key values are intentionally not recorded.
+
+For each key, the smoke used the first-party HTTPS Auth page and approved `mcp:read` only. The Authorization Code + PKCE flow completed and the authenticated MCP session successfully performed:
+- `initialize`
+- `notifications/initialized`
+- `tools/list` (51-tool catalogue)
+- `customers_list` with `per_page=1`
+
+No create, update, or delete operation was performed. API key values, access tokens, and customer records are not included in this repository.
+
+**Scope of this evidence:** this confirms successful access-token issuance and authenticated read-only MCP execution for both keys. It does not establish refresh-token rotation, client/ChatGPT-side revocation, or user-facing disconnect/replacement behavior. The historical smoke was performed before gates 1–5 were all formally closed; it is recorded as evidence, not as authorization to continue real-key testing out of sequence.
+
 ## Current NO-GO release gates
 
-The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. Until all gates are closed, do not enter a real Workspace key or run an authenticated production smoke test. Production write operations remain prohibited.
+The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. The historical two-key read-only smoke is recorded below. Do not run further real-key tests until all ordered gates are formally closed. Production write operations remain prohibited.
 
 ## Credential lifecycle finding — 2026-11-20
 
 A source review confirmed that the API key is stored in provider-encrypted grant `props`, and token validation returns those properties only to the internal MCP Worker. Access-token revocation removes only that token; refresh-token revocation deletes the full grant and encrypted properties. Reauthorization creates an independent grant because no stable Workspace identifier is available; it does not automatically replace an earlier key.
 
-The deployed Auth v6 still has a mismatch between the consent UI and token behavior: its global refresh-token TTL can issue a refresh token even when optional `offline_access` was not approved. Draft PR #54 adds the scope-aware correction and regression tests (43/43 Auth tests passed locally). It is not merged or deployed. User-facing disconnect/replacement UX is not implemented, and ChatGPT's disconnect/revocation behavior is unverified. This is an additional reason the real Workspace-key test remains NO-GO.
+The deployed Auth v6 still has a mismatch between the consent UI and token behavior: its global refresh-token TTL can issue a refresh token even when optional `offline_access` was not approved. Draft PR #54 adds the scope-aware correction and regression tests (43/43 Auth tests passed locally). It is not merged or deployed. User-facing disconnect/replacement UX is not implemented, and ChatGPT's disconnect/revocation behavior is unverified. This is an additional reason further real Workspace-key testing remains NO-GO.
