@@ -17,7 +17,7 @@
 | Main-branch tests | Auth 41/41; MCP 24/24 |
 | Dependency audit | 0 high-severity vulnerabilities |
 
-Production health, OAuth discovery, protected-resource metadata, MCP tool count, and invalid-token rejection have passed. These checks do **not** prove a successful OAuth authorization using a real Workspace key or an authenticated MCP tool call.
+Production health, OAuth discovery, protected-resource metadata, MCP tool count, and invalid-token rejection have passed. In addition, the operator confirmed that a production read-only OAuth Authorization Code + PKCE smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and `customers_list`.
 
 ## Completed implementation
 
@@ -50,9 +50,9 @@ Complete these gates in this exact order. Do not skip ahead to a real key.
 - [x] Implemented the operator-run script for OAuth Authorization Code + PKCE, loopback callback capture, and `mcp:read` only.
 - [x] Implemented authenticated MCP calls in the script: `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` with `per_page=1`.
 - [x] A local mocked integration test exercises registration, state, PKCE, session handling, tool discovery, and the read-only tool call without a real key or production request.
-- [x] Confirmed that the script and mock test are implementation evidence only; no real production Workspace OAuth smoke has been run.
+- [x] Confirmed that the script and mock test are implementation evidence only; separately, a real production OAuth smoke was later run successfully with two real Workspace keys (`KEY_1` and `KEY_2`).
 - [x] Merge the smoke cache fix and local integration harness in PR #51; the MCP suite on `main` now includes the local mock OAuth/MCP flow test.
-**Deferred to gate 6:** The real production OAuth smoke has not been run. It may start only after gates 1–5 are closed and reviewed.
+**Historical execution note:** The real production OAuth smoke was subsequently run successfully with `KEY_1` and `KEY_2` before gates 1–5 were all formally closed. Record this as completed read-only test evidence, not as permission to continue testing out of sequence. Any further real-key testing remains blocked until gates 1–5 are closed and reviewed.
 
 **Evidence:** PR #51 merged to `main`; MCP tests pass 24/24. The local mock test is not production OAuth evidence.
 
@@ -85,18 +85,20 @@ Complete these gates in this exact order. Do not skip ahead to a real key.
 
 ### 6. Real OAuth test — read-only only
 
-This gate may start only after gates 1–5 are closed and reviewed.
+**Historical evidence:** The operator confirmed that the production OAuth Authorization Code + PKCE flow was successfully completed with two real Workspace keys (`KEY_1` and `KEY_2`). Each authorization used `mcp:read` only and completed authenticated MCP `initialize`, `notifications/initialized`, `tools/list`, and `customers_list` with `per_page=1`. No write operation was run and no key value or customer record is retained in this repository.
 
-- [ ] The user enters the real Workspace API key only on the first-party HTTPS Auth authorization page; never paste it into chat, a shell command, GitHub, or logs.
-- [ ] Approve only `mcp:read`.
-- [ ] Complete OAuth Authorization Code + PKCE and verify token issuance/refresh as required by the client.
-- [ ] Execute only `initialize`, `tools/list`, and `customers_list` with `per_page=1`.
-- [ ] Verify no customer records, API keys, or tokens are printed or persisted by the smoke test.
+This test occurred before gates 1–5 were all formally closed. It is recorded accurately as historical evidence, but does not waive the agreed order or authorize additional real-key tests. Further testing may start only after gates 1–5 are closed and reviewed.
+
+- [x] For the completed smoke, the user entered each real Workspace API key only on the first-party HTTPS Auth authorization page; no key value was copied into chat, a shell command, GitHub, or logs.
+- [x] Approved only `mcp:read` for both key sessions.
+- [x] Completed OAuth Authorization Code + PKCE and verified access-token issuance for both sessions. **Refresh-token lifecycle was not established by this smoke.**
+- [x] Executed authenticated `initialize`, `notifications/initialized`, `tools/list`, and `customers_list` with `per_page=1` for both sessions.
+- [x] The smoke test did not print or persist API keys, access tokens, or returned customer records.
 - [ ] Do not run create, update, or delete operations against a real Workspace.
 
 ## Global stop conditions
 
-- No real Workspace key before gate 6.
+- No additional real Workspace-key test before gates 1–5 are formally closed, notwithstanding the historical two-key smoke recorded above.
 - No production write operations.
 - No merge or production deployment without separate explicit approval.
 - No deletion of Preview Workers, Preview environments, or related resources as part of interface cleanup.
