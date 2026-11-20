@@ -20,6 +20,11 @@
 
 ## Credential handling
 
+The upstream API key is stored in provider-encrypted grant properties and returned only to the internal MCP resource Worker after successful token validation. Each authorization has a random, per-grant subject; the current read-only validation response does not provide a stable Workspace identifier, so reauthorization creates a separate grant rather than replacing an earlier one.
+
+**Current lifecycle gap:** Auth v6 has a global refresh-token TTL, so it may issue refresh tokens even when the consent page's optional `offline_access` scope was not approved. Draft PR #54 adds a callback to issue refresh tokens only when the client requested and the user approved that scope. It also tests the distinction between access-token revocation and full refresh-token/grant revocation. This correction is not merged or deployed; do not use a real Workspace key until it is reviewed and the ordered gates are closed.
+
+
 - Collect the upstream key only on the first-party HTTPS authorization page.
 - Validate credentials with the harmless read-only `GET /customers?per_page=1` endpoint.
 - Validation requires `customers.read`; a 403 is not automatically an invalid key.

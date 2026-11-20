@@ -73,10 +73,14 @@ Complete these gates in this exact order. Do not skip ahead to a real key.
 
 ### 5. Review credential separation and revocation
 
-- [ ] Verify the Workspace key is held only in provider-encrypted grant properties and never appears in client-visible data, logs, URLs, or persistent plaintext records.
-- [ ] Review grant revocation and token invalidation behavior, including the public revocation endpoint.
-- [ ] Document the current limitations: credential replacement and user-facing disconnect/revocation UX are not implemented.
-- [ ] Confirm the exact safe procedure for revoking a grant and replacing an upstream key before a real Workspace test.
+- [x] Confirmed the Workspace key is stored in provider-encrypted grant `props` and returned only to the internal MCP resource Worker after token validation; raw keys are not used as limiter identifiers.
+- [x] Confirmed revocation semantics: access-token revocation removes that token only; refresh-token revocation removes the full grant and encrypted props.
+- [x] Confirmed each authorization is an independent grant. Reauthorizing the same OAuth client does not replace an earlier key because no stable Workspace identifier is available.
+- [x] Identified a consent mismatch: the deployed Auth v6 can issue a refresh token even when `offline_access` was not approved. A correction and regression tests are prepared in draft PR #54.
+- [ ] Merge PR #54 after CI/review; do not deploy it without separate approval.
+- [ ] Decide and document the supported disconnect/replacement procedure. User-facing disconnect UI is absent, and whether ChatGPT sends RFC 7009 revocation on disconnect is unverified.
+
+**Evidence:** PR #54 — https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/54 (draft; not merged or deployed). Detailed source review is included in that PR.
 
 ### 6. Real OAuth test — read-only only
 

@@ -21,6 +21,7 @@ Let a user connect their SyrianFatora workspace to ChatGPT or another compatible
 - Both live production Build triggers deploy without `--force`; the flag is not configured in either automatic trigger.
 - Production `workers.dev` endpoints remain enabled; public version-preview URLs are disabled.
 - **Confirmed outstanding Preview artifact:** the production MCP `/oauth/client-metadata.json` endpoint still advertises `SyrianFatora Preview E2E Client`; cleanup is prepared in draft PR #52 and is not deployed.
+- **Confirmed OAuth lifecycle gap:** Auth v6 may issue refresh tokens even when optional `offline_access` was not approved; the correction is prepared in draft PR #54 and is not deployed.
 - **NO-GO:** do not enter a real Workspace key until the six ordered gates in [the implementation plan](docs/implementation-plan.md) are closed. No real-key token issuance/refresh or authenticated production tool call has been verified.
 
 ## Agreed production architecture

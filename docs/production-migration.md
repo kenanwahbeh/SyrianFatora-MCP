@@ -302,3 +302,9 @@ Draft PR #52 gates this endpoint behind `IS_PREVIEW=true`, returns 404 in Produc
 ## Current NO-GO release gates
 
 The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. Until all gates are closed, do not enter a real Workspace key or run an authenticated production smoke test. Production write operations remain prohibited.
+
+## Credential lifecycle finding — 2026-11-20
+
+A source review confirmed that the API key is stored in provider-encrypted grant `props`, and token validation returns those properties only to the internal MCP Worker. Access-token revocation removes only that token; refresh-token revocation deletes the full grant and encrypted properties. Reauthorization creates an independent grant because no stable Workspace identifier is available; it does not automatically replace an earlier key.
+
+The deployed Auth v6 still has a mismatch between the consent UI and token behavior: its global refresh-token TTL can issue a refresh token even when optional `offline_access` was not approved. Draft PR #54 adds the scope-aware correction and regression tests (43/43 Auth tests passed locally). It is not merged or deployed. User-facing disconnect/replacement UX is not implemented, and ChatGPT's disconnect/revocation behavior is unverified. This is an additional reason the real Workspace-key test remains NO-GO.

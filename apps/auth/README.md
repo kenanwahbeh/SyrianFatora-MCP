@@ -59,7 +59,8 @@ Do not add per-credential API request quotas or per-OAuth-grant request quotas. 
 - A 403 from validation means the key lacks `customers.read` or API access is disabled; do not misreport it as an invalid key.
 - The provider encrypts authorization `props`; the resource Worker must not log or expose `props.upstreamApiKey`.
 - The random OAuth subject identifies a grant, not a verified human identity or SyrianFatora workspace ID.
-- Credential replacement and disconnect/revocation UX are not implemented yet.
+- Credential replacement and disconnect/revocation UX are not implemented yet. Reauthorizing creates an independent grant; revoke the previous refresh token before replacing a key.
+- Auth v6 currently has a refresh-token consent mismatch: refresh tokens may be issued even when `offline_access` was not approved. The correction and lifecycle tests are in draft PR #54; it is not deployed.
 - Live production smoke checks passed for `/health`, OAuth discovery, MCP protected-resource metadata, the MCP-to-Auth Service Binding, and rejection of an invalid bearer token with HTTP 401.
 - **Not yet verified:** token issuance and refresh using a real SyrianFatora workspace API key. Do not paste a real key into chat.
 - Auth CI on `main`: 41 tests pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown tests.
