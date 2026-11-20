@@ -110,32 +110,6 @@ The reported conflict was:
 
 No successful production overwrite was reported from this failed build. The later in-place migration was separately reviewed after the live MCP script/version and rollback reference were captured. Any `--force` use was a one-time migration exception, not a standing deployment setting. A read-only inspection on 2026-11-20 confirmed that both current production Cloudflare Build triggers deploy with `npx cf deploy --prebuilt --mode production` and contain no `--force`.
 
-## Provider quota and abuse-protection behavior
-
-The source change removes the competing local usage quotas:
-1. Auth approval retains IP-attempt and repeated credential-validation-attempt protections before upstream key validation.
-2. MCP no longer increments a per-credential or per-grant request counter and has no local daily/monthly quota.
-3. The SQLite Durable Object remains for authorization abuse protection and provider-directed cooldown state only.
-4. After SyrianFatora returns HTTP 429, a cooldown is stored only if the response contains a valid Retry-After value. The provider's duration is used as-is; no fallback is invented.
-5. No automatic retry is performed. The provider's 429 and quota headers remain authoritative.
-
-No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Before production cutover, Worker bindings, secret presence, generated Durable Object metadata, endpoint identity, and rollback references were independently checked; the current deployed versions and their verification results are recorded above.
-
-## Production configuration — completed
-
-- Auth Worker name: `syrianfatora-auth`.
-- Auth `ISSUER`: `https://syrianfatora-auth.kinan-api.workers.dev`.
-- Auth and MCP `MCP_SERVER_URL`: `https://syrianfatora-mcp.kinan-api.workers.dev/mcp`.
-- MCP `AUTH_SERVER_URL`: `https://syrianfatora-auth.kinan-api.workers.dev`.
-- Auth `OAUTH_KV`: production namespace `d19d9bd755c349f688cd55e299b8168f`.
-- Auth exports SQLite Durable Object `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd`.
-- MCP `AUTH_SERVER`: Service Binding to `syrianfatora-auth`, entrypoint `SyrianFatoraAuth`.
-- MCP `RATE_LIMITER`: Durable Object binding to `CredentialRateLimiter` in `syrianfatora-auth`.
-- Both Workers have the same random 48-byte `RATE_LIMIT_HMAC_SECRET`; the value is not readable through Cloudflare's secret API and is not recorded here.
-- Auth abuse protection is enabled in production: 7/IP/60s and 2/credential/60s.
-- Both primary workers.dev routes are enabled; public version-preview URLs are disabled.
-- No custom domain, DNS, unrelated Worker, or admin site was changed.
-
 ## Cloudflare Build triggers
 
 **Auth Worker**
@@ -213,12 +187,6 @@ Historical note for the source-only quota update before production cutover: no p
 
 The first CI build rejected Wrangler's top-level previews property because this repository uses the typed cf/config API. Both Worker configs now use defineConfig(({ isPreview }) => ...) and omit the RATE_LIMITER binding for Preview builds. Preview requests therefore fail closed before any SyrianFatora upstream call. The Preview command for this toolchain is cf previews deploy; do not use npx wrangler preview against these cf/config projects.
 
-## SyrianFatora quota handling
-
-SyrianFatora is the source of truth for workspace usage and quota. The MCP integration does not replicate published daily/monthly values as a local cap. It forwards normal requests and returns provider quota headers when present.
-
-A local cooldown is recorded only from a valid provider Retry-After value after an upstream HTTP 429. No fallback cooldown is configured. Distinct API keys and OAuth grants do not create separate local request budgets because no local request budget exists.
-
 ## Branch build validation change (2026-11-18)
 
 The branch-specific Cloudflare Build trigger for this migration branch now runs from /apps/mcp with npx cf deploy --dry-run. This validates the MCP Worker configuration and Build Output without uploading a Worker version, creating a Preview, or changing production. The separate main-branch production trigger was not modified.
@@ -278,7 +246,7 @@ This section supersedes earlier PR #14 notes in this file that described local p
 
 The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. PR #49 was subsequently merged to `main` at commit `b81461cf619d17da77d384149711fd0fe78abb7f`. That merge triggered the then-current Auth v6 Cloudflare Build; it did not change the MCP Worker. This historical release was superseded by the PR #54 deployment recorded below.
 
-## Current deployment verification — 2026-11-20
+## Earlier deployment verification before Auth v8 and MCP v11 — 2026-11-20
 
 | Worker | Successful Cloudflare Build | Source commit | Deployed version | Deployment |
 | --- | --- | --- | --- | --- |
