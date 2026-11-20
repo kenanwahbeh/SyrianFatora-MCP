@@ -1,4 +1,5 @@
 import { validateToolArguments } from "./input-validation.mjs";
+import { isAllowedMcpOrigin } from "./origin-validation.mjs";
 
 const BASE = "https://syrianfatora.com/api/public/v1";
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"];
@@ -88,70 +89,6 @@ for (const [resource, actions] of Object.entries(RESOURCES)) {
   }
 }
 
-export const MCP_PROTOCOL_VERSIONS = ["2025-03-26", "2024-11-05"];
-
-export function validateMcpOrigin(request, configuredOrigins = "") {
-  const origin = request.headers.get("Origin");
-  if (origin === null) return true;
-  if (typeof origin !== "string" || !origin || origin === "null") return false;
-  let parsed;
-  try { parsed = new URL(origin); } catch { return false; }
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
-  if ((parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) ||
-      parsed.origin !== origin || parsed.username || parsed.password) return false;
-  return String(configuredOrigins || "").split(",").map((item) => item.trim()).filter(Boolean).some((item) => {
-    try {
-      const candidate = new URL(item);
-      return candidate.origin === item && candidate.origin === origin &&
-        (candidate.protocol === "https:" || (candidate.protocol === "http:" && loopback));
-    } catch { return false; }
-  });
-}
-
-function validateSchema(value, schema, path = "arguments") {
-  if (!schema || typeof schema !== "object") return null;
-  const type = schema.type;
-  const valid = type === undefined ||
-    (type === "object" ? value !== null && typeof value === "object" && !Array.isArray(value) :
-    type === "array" ? Array.isArray(value) :
-    type === "integer" ? Number.isInteger(value) :
-    type === "number" ? typeof value === "number" && Number.isFinite(value) :
-    type === "string" ? typeof value === "string" :
-    type === "boolean" ? typeof value === "boolean" :
-    type === "null" ? value === null : true);
-  if (!valid) return `${path} must be ${type}.`;
-  if (schema.enum && !schema.enum.some((item) => Object.is(item, value))) return `${path} must be one of the allowed values.`;
-  if (typeof value === "string") {
-    if (schema.minLength !== undefined && value.length < schema.minLength) return `${path} is too short.`;
-    if (schema.maxLength !== undefined && value.length > schema.maxLength) return `${path} is too long.`;
-  }
-  if (typeof value === "number") {
-    if (schema.minimum !== undefined && value < schema.minimum) return `${path} is below the minimum.`;
-    if (schema.maximum !== undefined && value > schema.maximum) return `${path} exceeds the maximum.`;
-  }
-  if (schema.type === "object") {
-    for (const key of schema.required || []) if (!Object.hasOwn(value, key)) return `${path}.${key} is required.`;
-    const properties = schema.properties || {};
-    for (const [key, child] of Object.entries(value)) {
-      if (Object.hasOwn(properties, key)) {
-        const error = validateSchema(child, properties[key], `${path}.${key}`);
-        if (error) return error;
-      } else if (schema.additionalProperties === false) return `${path} contains an unsupported field: ${key}.`;
-      else if (schema.additionalProperties && typeof schema.additionalProperties === "object") {
-        const error = validateSchema(child, schema.additionalProperties, `${path}.${key}`);
-        if (error) return error;
-      }
-    }
-  }
-  if (schema.type === "array" && schema.items) {
-    for (let i = 0; i < value.length; i += 1) {
-      const error = validateSchema(value[i], schema.items, `${path}[${i}]`);
-      if (error) return error;
-    }
-  }
-  return null;
-}
-
 function reply(id, result) {
   return Response.json({ jsonrpc: "2.0", id, result }, {
     headers: { "Cache-Control": "no-store" },
@@ -230,10 +167,11 @@ export async function handleMcpRequest(request, props, {
   onUpstreamRateLimited,
   maxRequestBytes = 1_048_576,
   upstreamTimeoutMs = 10_000,
+  allowedOrigins = "",
 } = {}) {
   const url = new URL(request.url);
   if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
-  if (!validateMcpOrigin(request, arguments[2]?.allowedOrigins)) {
+  if (!isAllowedMcpOrigin(request, { MCP_ALLOWED_ORIGINS: allowedOrigins })) {
     return new Response("Forbidden origin.", { status: 403, headers: { "Cache-Control": "no-store" } });
   }
   if (request.method === "GET") {
@@ -270,12 +208,6 @@ export async function handleMcpRequest(request, props, {
   }
 
   const id = message.id === undefined ? null : message.id;
-  if (message.method !== "initialize") {
-    const protocolVersion = request.headers.get("MCP-Protocol-Version");
-    if (!protocolVersion || !MCP_PROTOCOL_VERSIONS.includes(protocolVersion)) {
-      return rpcError(id, -32600, "A supported MCP-Protocol-Version header is required.", 400);
-    }
-  }
   if (message.method !== "initialize") {
     const protocolVersion = request.headers.get("MCP-Protocol-Version") || "2025-03-26";
     if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
@@ -327,8 +259,6 @@ export async function handleMcpRequest(request, props, {
   if (!args || typeof args !== "object" || Array.isArray(args)) {
     return toolError(id, "Tool arguments must be a JSON object.");
   }
-  const schemaError = validateSchema(args, tool.inputSchema);
-  if (schemaError) return toolError(id, schemaError);
   const validationError = validateToolArguments(tool, args);
   if (validationError) return toolError(id, `Invalid tool arguments: ${validationError}`);
 
