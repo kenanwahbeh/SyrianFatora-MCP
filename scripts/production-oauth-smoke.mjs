@@ -19,8 +19,8 @@ function base64url(bytes) {
   return Buffer.from(bytes).toString("base64url");
 }
 
-function safeFailure(message) {
-  console.error(`\nSmoke test failed: ${message}`);
+function safeFailure() {
+  console.error("\nSmoke test failed. Check local diagnostics for details.");
   process.exitCode = 1;
 }
 
@@ -300,6 +300,6 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  safeFailure(error?.message || "unexpected error");
+main().catch(() => {
+  safeFailure();
 });
