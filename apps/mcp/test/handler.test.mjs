@@ -41,7 +41,7 @@ test("rejects undeclared top-level tool arguments", async () => {
   const response = await handleMcpRequest(rpc("tools/call", {
     name: "customers_get", arguments: { id: "cust-1", unexpected: true },
   }), props);
-  assert.match((await json(response)).result.content[0].text, /unsupported field: unexpected/);
+  assert.match((await json(response)).result.content[0].text, /unsupported property: unexpected/);
 });
 
 test("preserves extensible documented query filters", async () => {
@@ -400,12 +400,12 @@ test("rejects undeclared top-level tool arguments and invalid body types", async
   assert.match((await json(invalidBody)).result.content[0].text, /body must be object/);
 });
 
-test("rejects unsupported MCP protocol versions during initialize", async () => {
+test("falls back to the latest supported legacy protocol when initialize requests an unknown version", async () => {
   const response = await handleMcpRequest(rpc("initialize", {
-    protocolVersion: "2030-01-01",
+    protocolVersion: "2026-07-28",
   }), props);
-  assert.equal(response.status, 400);
-  assert.equal((await json(response)).error.code, -32600);
+  assert.equal(response.status, 200);
+  assert.equal((await json(response)).result.protocolVersion, "2025-11-25");
 });
 
 test("rejects unsupported MCP-Protocol-Version headers on subsequent requests", async () => {
@@ -430,6 +430,17 @@ test("accepts a supported MCP-Protocol-Version header after initialization", asy
       "MCP-Protocol-Version": "2024-11-05",
     },
     body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "ping", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await json(response)).result, {});
+});
+
+test("accepts the 2025-11-25 protocol-version header", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2025-11-25" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "ping", params: {} }),
   });
   const response = await handleMcpRequest(request, props);
   assert.equal(response.status, 200);
