@@ -381,18 +381,20 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"], apiKe
   return response;
 }
 
-async function exchangeCode(client, code, verifier) {
+async function exchangeCode(client, code, verifier, scope) {
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: REDIRECT_URI,
+    client_id: client.client_id,
+    code_verifier: verifier,
+    resource: MCP_RESOURCE,
+  });
+  if (scope) body.set("scope", scope);
   return request("/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: client.client_id,
-      code_verifier: verifier,
-      resource: MCP_RESOURCE,
-    }),
+    body,
   });
 }
 
@@ -567,6 +569,16 @@ test("refresh tokens are not issued unless offline_access was approved", async (
   assert.ok(grant, "the short-lived grant should exist while its access token is valid");
   const now = Math.floor(Date.now() / 1000);
   assert.ok(grant.expiresAt <= now + 60, "without offline_access the grant expires with the access token");
+
+  const secondVerifier = "runtime-client-downscope-verifier-long-enough";
+  const secondConsent = await beginAuthorization(client, secondVerifier, "mcp:read offline_access");
+  const secondApproval = await approveAuthorization(secondConsent.handle, secondConsent.cookie, ["mcp:read", "offline_access"]);
+  const secondCode = new URL(secondApproval.headers.get("Location")).searchParams.get("code");
+  const downscoped = await exchangeCode(client, secondCode, secondVerifier, "mcp:read");
+  assert.equal(downscoped.status, 200, await downscoped.clone().text());
+  const downscopedTokens = await downscoped.json();
+  assert.equal(downscopedTokens.scope, "mcp:read");
+  assert.equal(downscopedTokens.refresh_token, undefined, "a client that does not request offline_access receives no refresh token even when the user approved it");
 });
 
 test("access and refresh tokens expire and resource-server validation reflects revocation", async () => {
