@@ -41,24 +41,25 @@ Complete these gates in this exact order. Do not skip ahead to a real key.
 - [x] Read-only inspection confirms both current production Cloudflare Build deploy commands are `npx cf deploy --prebuilt --mode production` with no `--force`.
 - [x] Both triggers are path-scoped to their own application directories and target `main`.
 - [x] Merge the deployment-policy/runbook clarification in PR #50; both live triggers remain free of `--force`.
-- [ ] Keep any future one-time `--force` migration separate, explicitly approved, baseline-captured, and removed from the trigger afterward.
+- [x] Policy prohibits `--force` in automatic triggers; any exceptional one-time migration requires separate explicit approval, a captured baseline, a verified artifact, and a rollback plan.
 
 **Evidence:** PR #50 merged to `main`; live Cloudflare Build triggers were rechecked after merge.
 
-### 2. Authenticated Smoke Test — exercise real MCP tools
+### 2. Smoke Test implementation — prepare authenticated MCP tool coverage
 
-- [x] The operator-run script performs OAuth Authorization Code + PKCE, captures the loopback callback, and requests only `mcp:read`.
-- [x] The script calls authenticated MCP `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` with `per_page=1`.
+- [x] Implemented the operator-run script for OAuth Authorization Code + PKCE, loopback callback capture, and `mcp:read` only.
+- [x] Implemented authenticated MCP calls in the script: `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` with `per_page=1`.
 - [x] A local mocked integration test exercises registration, state, PKCE, session handling, tool discovery, and the read-only tool call without a real key or production request.
+- [x] Confirmed that the script and mock test are implementation evidence only; no real production Workspace OAuth smoke has been run.
 - [x] Merge the smoke cache fix and local integration harness in PR #51; the MCP suite on `main` now includes the local mock OAuth/MCP flow test.
-- [ ] Do not run the real production OAuth smoke yet; that belongs to gate 6 after gates 1–5 are closed.
+**Deferred to gate 6:** The real production OAuth smoke has not been run. It may start only after gates 1–5 are closed and reviewed.
 
 **Evidence:** PR #51 merged to `main`; MCP tests pass 24/24. The local mock test is not production OAuth evidence.
 
 ### 3. Remove Preview artifacts from the Production interface
 
-- [x] Confirmed production `/oauth/client-metadata.json` currently returns `SyrianFatora Preview E2E Client` and a placeholder `example.com` redirect URI.
-- [x] Prepared a source fix that returns 404 in Production, retains the CIMD test document only in Preview, and removes the Preview suffix from the production MCP server version.
+- [x] Recorded the pre-cleanup production response: `/oauth/client-metadata.json` exposed `SyrianFatora Preview E2E Client` and a placeholder `example.com` redirect URI.
+- [x] Implemented the production 404 gate, retained the CIMD test document only in Preview, and removed the Preview suffix from the production MCP server version.
 - [x] Merge PR #52 and verify the automatic Cloudflare Build deployment.
 - [x] Verify production `/oauth/client-metadata.json` returns 404 and the live Worker binding has `IS_PREVIEW=false`.
 - [x] Preserve the isolated Preview Worker and its Preview-only CIMD test path; no Preview resources were deleted.

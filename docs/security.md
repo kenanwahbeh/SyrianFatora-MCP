@@ -24,14 +24,13 @@ The upstream API key is stored in provider-encrypted grant properties and return
 
 **Current lifecycle gap:** Auth v6 has a global refresh-token TTL, so it may issue refresh tokens even when the consent page's optional `offline_access` scope was not approved. Draft PR #54 adds a callback to issue refresh tokens only when the client requested and the user approved that scope. It also tests the distinction between access-token revocation and full refresh-token/grant revocation. This correction is not merged or deployed; do not use a real Workspace key until it is reviewed and the ordered gates are closed.
 
-
 - Collect the upstream key only on the first-party HTTPS authorization page.
 - Validate credentials with the harmless read-only `GET /customers?per_page=1` endpoint.
 - Validation requires `customers.read`; a 403 is not automatically an invalid key.
 - The validation endpoint is fixed to `https://syrianfatora.com/api/public/v1/customers?per_page=1`; redirects are rejected.
 - Never place credentials in URL parameters, analytics, logs, error traces, browser local storage, hidden form fields, or plugin configuration.
 - Do not create a separate plaintext KV record for the API key.
-- Implement a disconnect/revoke action that invalidates OAuth grants and deletes or invalidates the associated upstream credential. This UX is still outstanding.
+- Add a user-facing disconnect/replacement flow that invokes OAuth grant revocation and clearly handles the associated upstream credential. The provider-level revocation semantics exist, but this user-facing UX is still outstanding.
 
 ## Authorization abuse protection and provider quota
 

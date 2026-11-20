@@ -118,7 +118,7 @@ The source change removes the competing local usage quotas:
 4. After SyrianFatora returns HTTP 429, a cooldown is stored only if the response contains a valid Retry-After value. The provider's duration is used as-is; no fallback is invented.
 5. No automatic retry is performed. The provider's 429 and quota headers remain authoritative.
 
-No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Production deployment still requires the usual independent checks of Worker bindings, secrets, generated Durable Object metadata, endpoint identity, and rollback readiness.
+No workspace quota thresholds need to be selected or configured locally. The HMAC secret remains relevant to the remaining credential-attempt protection and credential-scoped provider cooldown identity. Before production cutover, Worker bindings, secret presence, generated Durable Object metadata, endpoint identity, and rollback references were independently checked; the current deployed versions and their verification results are recorded above.
 
 ## Production configuration — completed
 
