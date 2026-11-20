@@ -180,7 +180,7 @@ Both triggers target `main`, are path-scoped to their respective app directories
 | 2026-11-19T04:16Z | Final MCP production deployment | Version 6 `392a040a-eff8-421d-952b-0075dc74e703`; deployment `6fe36215-6e5d-4368-8744-ea90473b78c3`; public preview URLs disabled |
 | 2026-11-19 | Production smoke tests | Auth/MCP health, OAuth discovery, protected-resource metadata, 51-tool health count, and invalid-token HTTP 401 all passed |
 | 2026-11-19 | Dependency audit and unit tests | npm 10.9.2 audit: zero vulnerabilities; Auth 40/40 tests; MCP 21/21 tests; SQLite concurrency test passed |
-| 2026-11-19 | Real-key OAuth end-to-end | Not run; requires a real SyrianFatora workspace key entered through the first-party authorization page. No key was shared in chat and no workspace writes were performed |
+| 2026-11-19 | Real-key OAuth end-to-end (status at time of entry) | Not yet run at the time this historical log entry was written; later two-key read-only smoke evidence is recorded in the 2026-11-20 section below. No workspace writes were performed |
 
 ## Change record template
 
