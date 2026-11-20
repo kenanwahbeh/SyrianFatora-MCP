@@ -88,7 +88,9 @@ before(async () => {
         RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS: "100",
         RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS: "60",
         ACCESS_TOKEN_TTL_SECONDS: "60",
-        REFRESH_TOKEN_TTL_SECONDS: "60",
+        // Keep refresh tokens comfortably above the provider's 60-second
+        // minimum during rotation tests; expiry is simulated explicitly below.
+        REFRESH_TOKEN_TTL_SECONDS: "3600",
         // Client registrations must outlive the token-expiry wait below;
         // otherwise the refresh attempt fails as an unknown client (401)
         // instead of an expired refresh token (400).
@@ -522,6 +524,17 @@ async function refreshToken(client, refreshToken) {
   });
 }
 
+async function expireRefreshGrant(refreshToken) {
+  const [userId, grantId] = refreshToken.split(":");
+  assert.ok(userId && grantId, "refresh token must identify its grant");
+  const kv = await miniflare.getKVNamespace("OAUTH_KV");
+  const grantKey = `grant:${userId}:${grantId}`;
+  const grant = await kv.get(grantKey, { type: "json" });
+  assert.ok(grant, "refresh token grant must exist in the isolated KV namespace");
+  grant.expiresAt = Math.floor(Date.now() / 1000) + 30;
+  await kv.put(grantKey, JSON.stringify(grant), { expirationTtl: 3600 });
+}
+
 async function revokeToken(client, token, hint = "refresh_token") {
   return request("/oauth/token", {
     method: "POST",
@@ -560,6 +573,9 @@ test("access and refresh tokens expire and resource-server validation reflects r
   const expiredAccess = await resourceValidate(tokens.access_token);
   assert.equal(expiredAccess.status, 401, await expiredAccess.clone().text());
 
+  // Force the stored grant inside the isolated test KV to expire inside the
+  // provider's 60-second minimum window without adding another real-time wait.
+  await expireRefreshGrant(tokens.refresh_token);
   const expiredRefresh = await refreshToken(client, tokens.refresh_token);
   assert.equal(expiredRefresh.status, 400, await expiredRefresh.clone().text());
   const refreshError = await expiredRefresh.json();
@@ -601,8 +617,8 @@ test("resource-server validation isolates grants by their stored upstream creden
 
   const revokedA = await resourceValidate(tokensA.access_token);
   const stillValidB = await resourceValidate(tokensB.access_token);
-  assert.equal(revokedA.status, 401, await revokedA.clone().text());
-  assert.equal(stillValidB.status, 200, await stillValidB.clone().text());
+  assert.equal(revokedA.status, 401, "revoked tenant token must be rejected");
+  assert.equal(stillValidB.status, 200, "the other tenant token must remain valid");
 });
 
 test("refresh tokens rotate and the previous refresh token is rejected", async () => {
