@@ -1,4 +1,8 @@
+import { validateToolArguments } from "./input-validation.mjs";
+import { isAllowedMcpOrigin } from "./origin-validation.mjs";
+
 const BASE = "https://syrianfatora.com/api/public/v1";
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-03-26", "2024-11-05"];
 
 const RESOURCES = {
   customers: ["list", "get", "create"],
@@ -163,9 +167,13 @@ export async function handleMcpRequest(request, props, {
   onUpstreamRateLimited,
   maxRequestBytes = 1_048_576,
   upstreamTimeoutMs = 10_000,
+  allowedOrigins = "",
 } = {}) {
   const url = new URL(request.url);
   if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
+  if (!isAllowedMcpOrigin(request, { MCP_ALLOWED_ORIGINS: allowedOrigins })) {
+    return new Response("Forbidden origin.", { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
   if (request.method === "GET") {
     return new Response("Method Not Allowed", {
       status: 405,
@@ -200,14 +208,22 @@ export async function handleMcpRequest(request, props, {
   }
 
   const id = message.id === undefined ? null : message.id;
+  if (message.method !== "initialize") {
+    const protocolVersion = request.headers.get("MCP-Protocol-Version") ?? "2025-03-26";
+    if (!SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
+      return rpcError(id, -32600, "Unsupported MCP-Protocol-Version. Supported versions: 2025-11-25, 2025-03-26, 2024-11-05.", 400);
+    }
+  }
   if (message.method === "notifications/initialized" || message.method === "notifications/cancelled") {
     return new Response(null, { status: 202, headers: { "Cache-Control": "no-store" } });
   }
   if (message.method === "initialize") {
     const requested = message.params && message.params.protocolVersion;
-    const supported = ["2025-03-26", "2024-11-05"];
+    const negotiatedVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
+      ? requested
+      : SUPPORTED_PROTOCOL_VERSIONS[0];
     return reply(id, {
-      protocolVersion: supported.includes(requested) ? requested : "2025-03-26",
+      protocolVersion: negotiatedVersion,
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "syrianfatora-mcp", version: serverVersion },
     });
@@ -243,6 +259,8 @@ export async function handleMcpRequest(request, props, {
   if (!args || typeof args !== "object" || Array.isArray(args)) {
     return toolError(id, "Tool arguments must be a JSON object.");
   }
+  const validationError = validateToolArguments(tool, args);
+  if (validationError) return toolError(id, `Invalid tool arguments: ${validationError}`);
 
   const method = action === "list" || action === "get"
     ? "GET"

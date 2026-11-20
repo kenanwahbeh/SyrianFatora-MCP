@@ -19,6 +19,7 @@ export default defineConfig(({ isPreview }) => ({
 		},
 		env: {
 			IS_PREVIEW: bindings.text(isPreview ? "true" : "false"),
+			MCP_ALLOWED_ORIGINS: bindings.text(""),
 			MCP_SERVER_URL: bindings.text(
 				isPreview
 					? "https://test-durable-object-atomicity-syrianfatora-mcp-oauth-preview.kinan-api.workers.dev/mcp"

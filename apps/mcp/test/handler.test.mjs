@@ -11,9 +11,11 @@ const props = {
 };
 
 function rpc(method, params = {}, id = 1) {
+  const headers = { "Content-Type": "application/json" };
+  if (method !== "initialize") headers["MCP-Protocol-Version"] = "2025-03-26";
   return new Request("https://mcp.example.test/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
 }
@@ -21,6 +23,65 @@ function rpc(method, params = {}, id = 1) {
 async function json(response) {
   return response.json();
 }
+
+
+test("validates tool arguments against the published inputSchema", async () => {
+  let called = false;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list", arguments: { query: { per_page: 101 } },
+  }), props, { checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async () => { called = true; return Response.json({}); } });
+  const body = await json(response);
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /per_page exceeds the maximum/);
+  assert.equal(called, false);
+});
+
+test("rejects undeclared top-level tool arguments", async () => {
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_get", arguments: { id: "cust-1", unexpected: true },
+  }), props);
+  assert.match((await json(response)).result.content[0].text, /unsupported property: unexpected/);
+});
+
+test("preserves extensible documented query filters", async () => {
+  let observed;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list", arguments: { query: { per_page: 10, status: "active" } },
+  }), props, { checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async (url) => { observed = url; return Response.json({ data: [] }); } });
+  assert.equal(new URL(observed).searchParams.get("status"), "active");
+  assert.equal((await json(response)).result.isError, false);
+});
+
+test("uses the 2025-03-26 compatibility default when older clients omit the protocol header", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 200);
+  assert.equal((await json(response)).result.tools.length, 51);
+});
+
+test("rejects unsupported MCP protocol versions", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST", headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2099-01-01" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/list", params: {} }),
+  });
+  assert.equal((await handleMcpRequest(request, props)).status, 400);
+});
+
+test("rejects disallowed Origin before parsing MCP requests", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: { Origin: "https://evil.example", "MCP-Protocol-Version": "2025-03-26" },
+    body: "{invalid",
+  });
+  const response = await handleMcpRequest(request, props, { allowedOrigins: "https://chat.example" });
+  assert.equal(response.status, 403);
+  assert.equal(await response.text(), "Forbidden origin.");
+});
 
 test("preserves the complete 51-tool catalogue", () => {
   assert.equal(tools.length, 51);
@@ -161,7 +222,7 @@ test("payment void still requires a reason", async () => {
   const body = await json(response);
 
   assert.equal(body.result.isError, true);
-  assert.equal(body.result.content[0].text, "A void reason of 3–500 characters is required.");
+  assert.match(body.result.content[0].text, /arguments\.reason is too short/);
   assert.equal(called, false);
 });
 
@@ -195,7 +256,7 @@ test("redacts the upstream API key if the upstream response echoes it", async ()
 test("bounds JSON request bodies even without a content-length header", async () => {
   const request = new Request("https://mcp.example.test/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2025-03-26" },
     body: "x".repeat(128),
   });
   const response = await handleMcpRequest(request, props, { maxRequestBytes: 32 });
@@ -207,7 +268,7 @@ test("bounds JSON request bodies even without a content-length header", async ()
 test("rejects malformed JSON-RPC payloads", async () => {
   const request = new Request("https://mcp.example.test/mcp", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2025-03-26" },
     body: "{",
   });
   const response = await handleMcpRequest(request, props);
@@ -306,4 +367,82 @@ test("records the provider Retry-After when upstream returns 429", async () => {
   assert.equal(recorded, "12");
   assert.equal(body.result.isError, true);
   assert.equal(JSON.parse(body.result.content[0].text).status, 429);
+});
+
+
+test("validates tool arguments against the published input schema", async () => {
+  let called = false;
+  const response = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: { query: { per_page: 0 } },
+  }), props, {
+    checkUpstreamCooldown: async () => ({ allowed: true }),
+    fetchImpl: async () => { called = true; return Response.json({}); },
+  });
+  const body = await json(response);
+
+  assert.equal(body.result.isError, true);
+  assert.match(body.result.content[0].text, /per_page is below the minimum/);
+  assert.equal(called, false);
+});
+
+test("rejects undeclared top-level tool arguments and invalid body types", async () => {
+  const extra = await handleMcpRequest(rpc("tools/call", {
+    name: "customers_list",
+    arguments: { query: {}, unexpected: true },
+  }), props);
+  assert.match((await json(extra)).result.content[0].text, /unsupported property: unexpected/);
+
+  const invalidBody = await handleMcpRequest(rpc("tools/call", {
+    name: "invoices_create",
+    arguments: { body: [] },
+  }), props, { requireWriteScope: () => null });
+  assert.match((await json(invalidBody)).result.content[0].text, /body must be object/);
+});
+
+test("falls back to the latest supported legacy protocol when initialize requests an unknown version", async () => {
+  const response = await handleMcpRequest(rpc("initialize", {
+    protocolVersion: "2026-07-28",
+  }), props);
+  assert.equal(response.status, 200);
+  assert.equal((await json(response)).result.protocolVersion, "2025-11-25");
+});
+
+test("rejects unsupported MCP-Protocol-Version headers on subsequent requests", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": "2030-01-01",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "ping", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 400);
+  assert.equal((await json(response)).error.code, -32600);
+});
+
+test("accepts a supported MCP-Protocol-Version header after initialization", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": "2024-11-05",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "ping", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await json(response)).result, {});
+});
+
+test("accepts the 2025-11-25 protocol-version header", async () => {
+  const request = new Request("https://mcp.example.test/mcp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "MCP-Protocol-Version": "2025-11-25" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 11, method: "ping", params: {} }),
+  });
+  const response = await handleMcpRequest(request, props);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await json(response)).result, {});
 });

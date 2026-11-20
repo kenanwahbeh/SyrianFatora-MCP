@@ -4,6 +4,7 @@ import {
 } from "@cloudflare/workers-oauth-provider";
 import { env } from "cloudflare:workers";
 import { handleMcpRequest } from "./handler.mjs";
+import { isAllowedMcpOrigin } from "./origin-validation.mjs";
 import { checkUpstreamCooldown, recordProviderCooldown } from "./rate-limit-client.mjs";
 import { previewClientMetadataResponse } from "./preview-metadata.mjs";
 
@@ -22,6 +23,7 @@ const resourceServer = new OAuthResourceServer({
 
       return handleMcpRequest(request, ctx.props, {
         serverVersion: workerEnv.IS_PREVIEW === "true" ? "1.2.0-oauth-preview" : "1.2.0",
+        allowedOrigins: workerEnv.MCP_ALLOWED_ORIGINS,
         requireWriteScope: () => ctx.auth.scope.includes("mcp:write")
           ? null
           : insufficientScope(ctx.auth, ["mcp:read", "mcp:write"]),
@@ -33,9 +35,14 @@ const resourceServer = new OAuthResourceServer({
   },
 });
 
-function addCors(response) {
+function addCors(response, request, workerEnv) {
   const headers = new Headers(response.headers);
-  headers.set("Access-Control-Allow-Origin", "*");
+  const requestOrigin = request?.headers.get("Origin");
+  if (requestOrigin === null || requestOrigin === undefined) headers.set("Access-Control-Allow-Origin", "*");
+  else if (isAllowedMcpOrigin(request, workerEnv)) {
+    headers.set("Access-Control-Allow-Origin", requestOrigin);
+    headers.append("Vary", "Origin");
+  }
   headers.set("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "content-type, authorization, mcp-protocol-version, accept");
   headers.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Protocol-Version");
@@ -52,7 +59,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/oauth/client-metadata.json") {
-      return addCors(previewClientMetadataResponse(url, workerEnv));
+      return addCors(previewClientMetadataResponse(url, workerEnv), request, workerEnv);
     }
 
     if (url.pathname === "/health") {
@@ -61,13 +68,20 @@ export default {
         service: "syrianfatora-mcp",
         mode: "oauth-resource-server",
         toolCount: 51,
-      }));
+      }), request, workerEnv);
+    }
+
+    if (url.pathname === "/mcp" && !isAllowedMcpOrigin(request, workerEnv)) {
+      return addCors(new Response("Forbidden origin.", {
+        status: 403,
+        headers: { "Cache-Control": "no-store" },
+      }), request, workerEnv);
     }
 
     if (request.method === "OPTIONS") {
-      return addCors(new Response(null, { status: 204 }));
+      return addCors(new Response(null, { status: 204 }), request, workerEnv);
     }
 
-    return addCors(await resourceServer.fetch(request, workerEnv, ctx));
+    return addCors(await resourceServer.fetch(request, workerEnv, ctx), request, workerEnv);
   },
 };
