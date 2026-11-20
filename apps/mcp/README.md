@@ -62,7 +62,8 @@ The credential HMAC fingerprint is used only to scope authorization anti-abuse a
 - `npm run build:check`: production Worker build succeeds without deployment.
 - `npm test`: 24 MCP tests pass.
 - Production smoke checks pass for MCP health, OAuth protected-resource metadata at `/.well-known/oauth-protected-resource/mcp`, 51 tools reported by health, and rejection of an invalid bearer token with HTTP 401.
-- **Not yet verified:** successful authenticated `initialize` and `tools/list` using a token issued after validating a real SyrianFatora workspace API key. Do not paste a real key into chat.
+- **Real-key smoke verified:** the operator confirmed successful authenticated `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` (`per_page=1`) calls using OAuth sessions authorized with two real Workspace keys (`KEY_1` and `KEY_2`). No write operation was tested; key values and customer records are not recorded.
+- Refresh-token lifecycle, revocation, and user-facing disconnect/replacement remain separate outstanding checks.
 - Never use a production workspace for write-operation tests.
 
 ## Authenticated production OAuth smoke test
