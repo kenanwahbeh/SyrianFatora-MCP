@@ -62,7 +62,8 @@ Do not add per-credential API request quotas or per-OAuth-grant request quotas. 
 - Credential replacement and disconnect/revocation UX are not implemented yet. Reauthorizing creates an independent grant; revoke the previous refresh token before replacing a key.
 - Auth v6 currently has a refresh-token consent mismatch: refresh tokens may be issued even when `offline_access` was not approved. The correction and lifecycle tests are in draft PR #54; it is not deployed.
 - Live production smoke checks passed for `/health`, OAuth discovery, MCP protected-resource metadata, the MCP-to-Auth Service Binding, and rejection of an invalid bearer token with HTTP 401.
-- **Not yet verified:** token issuance and refresh using a real SyrianFatora workspace API key. Do not paste a real key into chat.
+- **Real-key smoke verified:** the operator confirmed successful production OAuth Authorization Code + PKCE authorization with two real Workspace keys (`KEY_1` and `KEY_2`). Keys were entered only on the first-party HTTPS authorization page; the smoke used `mcp:read` and performed read-only MCP calls. Key values are not recorded.
+- **Still outstanding:** refresh-token lifecycle behavior, revocation from the client/ChatGPT side, and user-facing disconnect/replacement UX. The Auth v6 `offline_access` mismatch remains tracked in draft PR #54.
 - Auth CI on `main`: 41 tests pass, including SQLite Durable Object concurrency serialization and provider-directed 429 cooldown tests.
 - `npm audit --audit-level=high` currently reports zero vulnerabilities; the CI and Cloudflare Build pipelines enforce this gate.
 
