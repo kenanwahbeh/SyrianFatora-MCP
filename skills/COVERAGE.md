@@ -2,7 +2,7 @@
 
 ## Source precedence
 
-`page.html` is authoritative for the documented REST API contract: endpoint paths, HTTP methods, scopes, request fields, filters, enums, examples, response envelopes, quotas, errors and webhook behavior. If an existing Skill or MCP wrapper differs, this audit records the mismatch; do not rewrite the developer contract to fit the wrapper. `apps/mcp/src/handler.mjs` remains authoritative only for what the current MCP server actually exposes and how its arguments are mapped.
+The user-supplied `page.html` is authoritative for the documented REST API contract: endpoint paths, HTTP methods, scopes, request fields, filters, enums, examples, response envelopes, quotas, errors and webhook behavior. Its reviewed snapshot SHA-256 is `0810c2d97b0d3b1e22475e9dc752be3da23c092071c0814610f05ed483306a64`. The original HTML is intentionally not committed because it contains the full website's client-side code, unrelated to this API contract; the normalized MCP schema and this coverage audit are committed instead. If an existing Skill or MCP wrapper differs, record the mismatch; do not rewrite the developer contract to fit the wrapper. `apps/mcp/src/handler.mjs` remains authoritative only for what the current MCP server actually exposes and how its arguments are mapped.
 
 ## Section-by-section coverage
 

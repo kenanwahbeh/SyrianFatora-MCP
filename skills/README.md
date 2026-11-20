@@ -40,8 +40,8 @@ See [`COVERAGE.md`](COVERAGE.md) for the complete section-by-section audit and t
 
 ## Source of truth
 
-- `../page.html` is the supplied Arabic developer reference and is authoritative for documented REST fields, filters, examples, response shapes, quota rules and webhook behavior.
-- `../apps/mcp/src/handler.mjs` defines the current MCP tool inventory and REST mapping; `../apps/mcp/src/rest-contract.mjs` defines page-aligned input schemas.
+- The user-supplied Arabic `page.html` was the authoritative reference for documented REST fields, filters, examples, response shapes, quota rules and webhook behavior. The original HTML snapshot is intentionally not committed; its SHA-256 is recorded in `COVERAGE.md`.
+- `../apps/mcp/src/handler.mjs` defines the current MCP tool inventory and REST mapping; `../apps/mcp/src/rest-contract.mjs` contains the normalized input schemas derived from the reference.
 - When the two disagree, surface the mismatch rather than guessing. The current MCP tool list must be checked at runtime.
 
 These skills use the already-connected SyrianFatora MCP tools. They must never request, print, store or expose API keys, OAuth tokens or webhook secrets.
