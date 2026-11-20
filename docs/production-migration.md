@@ -276,7 +276,7 @@ This section supersedes earlier PR #14 notes in this file that described local p
 | 2026-11-20T02:23:42Z | Post-deployment read-only smoke checks | `/health` returned `ok: true`; OAuth discovery returned the expected issuer, authorization/token endpoints, and `mcp:read`, `mcp:write`, `offline_access` scopes. Cloudflare secret-binding inventory confirms `RATE_LIMIT_HMAC_SECRET` remains present; secret value was not read. |
 | 2026-11-20 | Rollback reference | Previous Auth Worker version #4 `93411491-de13-4cd9-8d7e-d441d07ad674`, deployment `67a91b5b-9b1b-4ca0-8af6-b88a657dc543`. |
 
-The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. PR #49 was subsequently merged to `main` at commit `b81461cf619d17da77d384149711fd0fe78abb7f`. That merge triggered the current Auth v6 Cloudflare Build; it did not change the MCP Worker.
+The release changed only the Auth Worker code. No MCP Worker, KV namespace, Durable Object, secret value, DNS record, custom domain, or customer workspace data was modified. The first failed build did not deploy. PR #49 was subsequently merged to `main` at commit `b81461cf619d17da77d384149711fd0fe78abb7f`. That merge triggered the then-current Auth v6 Cloudflare Build; it did not change the MCP Worker. This historical release was superseded by the PR #54 deployment recorded below.
 
 ## Current deployment verification — 2026-11-20
 
@@ -331,3 +331,19 @@ The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. T
 A source review confirmed that the API key is stored in provider-encrypted grant `props`, and token validation returns those properties only to the internal MCP Worker. Access-token revocation removes only that token; refresh-token revocation deletes the full grant and encrypted properties. Reauthorization creates an independent grant because no stable Workspace identifier is available; it does not automatically replace an earlier key.
 
 **Superseded finding:** Auth v6 could issue a refresh token even when optional `offline_access` was not approved. PR #54 corrected this with a scope-aware token-exchange callback and added regression coverage. PR #54 is merged and the correction is deployed in Auth v8 (100% traffic). User-facing disconnect/replacement UX is still not implemented, and ChatGPT's disconnect/revocation behavior remains unverified. Further real Workspace-key testing remains NO-GO until the remaining ordered gates are closed.
+
+
+## Latest deployment state after PR #54 — 2026-11-20
+
+A read-only Cloudflare API inspection after PR #54 merged confirmed the following current deployments:
+
+| Worker | Current version | Current deployment | Traffic | Deployment time (UTC) |
+| --- | --- | --- | --- | --- |
+| Auth `syrianfatora-auth` | v8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532` | `4bd65dcd-240e-44f7-b2db-c025a0b51a05` | 100% | 2026-11-20 04:42:36 |
+| MCP `syrianfatora-mcp` | v11 `a1dcd66c-1a5c-48d1-bc1d-f63b1962d950` | `01fa136b-96b9-436d-be33-165390c6a099` | 100% | 2026-11-20 04:32:59 |
+
+Auth v8 was uploaded after PR #54 merge commit `75c8f0616f8eea1526d4bfda559a8fc9ce456525`. Its deployed version metadata confirms the production issuer, MCP resource URL, production KV and SQLite Durable Object bindings, and the presence of the HMAC secret binding (the secret value was not read). The merged Auth code applies the `offline_access`-aware refresh-token callback.
+
+MCP v11's deployed bindings show `IS_PREVIEW=false`, the production `AUTH_SERVER` Service Binding, and the expected `RATE_LIMITER` Durable Object binding. MCP v10 remains the immediate rollback target and retains the Preview cleanup. MCP v9 remains unsafe as a direct rollback because it predates the Preview cleanup.
+
+The Cloudflare deployment inspection confirms version assignment and traffic percentages. It is not a substitute for a post-deployment end-to-end OAuth smoke. No real Workspace key was used during this deployment inspection, and no additional customer operation was performed. The historical two-key read-only smoke remains the only real-key end-to-end evidence recorded here.
