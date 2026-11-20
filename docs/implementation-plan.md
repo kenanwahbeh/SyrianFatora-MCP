@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-11-20
 
-**Release status:** **NO-GO** for entering a real SyrianFatora Workspace API key.
+**Release status:** **NO-GO** for further real-key testing until gates 1–5 are formally closed and reviewed.
 **Source of truth for deployed IDs and production probes:** [production migration runbook](production-migration.md).
 
 ## Deployed production baseline
@@ -34,7 +34,7 @@ Production health, OAuth discovery, protected-resource metadata, MCP tool count,
 
 ## Ordered pre-Workspace gates
 
-Complete these gates in this exact order. Do not skip ahead to a real key.
+Complete these gates in this exact order. The historical two-key smoke is documented below; do not perform additional real-key tests out of sequence.
 
 ### 1. Deployment gate — remove automatic `--force`
 
