@@ -11,11 +11,9 @@ The OAuth-protected MCP resource server for SyrianFatora. It preserves the exist
 - Requires both `mcp:read` and `mcp:write` for create, update, and delete operations.
 - Preserves existing tool request/response semantics, including the payment-void reason requirement.
 - Applies bounded request handling and avoids returning the upstream API key in echoed responses.
-- Validates browser `Origin` headers against the exact `MCP_ALLOWED_ORIGINS` allowlist; native clients without an `Origin` header remain supported.
-- Requires a supported `MCP-Protocol-Version` header on every POST after `initialize`.
 - Validates tool-call arguments against each published `inputSchema` before forwarding a request.
-- Validates browser `Origin` headers on `/mcp`; requests without `Origin` remain supported for non-browser MCP clients.
-- Negotiates only the supported MCP protocol versions (`2025-03-26` and `2024-11-05`) and rejects unsupported version headers.
+- Validates browser `Origin` headers on `/mcp`; same-origin requests and explicitly configured origins are accepted, while absent Origin remains supported for native clients.
+- Negotiates legacy MCP protocol versions `2025-11-25`, `2025-03-26`, and `2024-11-05`; unsupported subsequent version headers are rejected with HTTP 400. Older clients omitting the header default to `2025-03-26`.
 
 ## Production identity
 
@@ -38,7 +36,7 @@ The MCP endpoint accepts requests with no `Origin` header for non-browser client
 
 Set `MCP_ALLOWED_ORIGINS` to a comma-separated list of exact origins, including scheme and port where applicable (for example, `https://chat.example.com,https://app.example.com`). Paths, wildcards, opaque `null` origins, non-loopback HTTP origins, and non-canonical values are rejected. Determine the actual browser-client origin before configuring it; do not guess or broadly allow all origins. No production Worker variable or deployment is changed by this source change.
 
-The Worker negotiates `2025-03-26` or `2024-11-05` during `initialize`. Subsequent requests reject unsupported `MCP-Protocol-Version` values with HTTP 400. For compatibility with clients predating the header, an omitted header defaults to `2025-03-26` as specified by the MCP transport guidance.
+The Worker negotiates `2025-11-25`, `2025-03-26`, or `2024-11-05` during `initialize`; when a client requests an unknown version, it selects the latest supported legacy version. Subsequent requests reject unsupported `MCP-Protocol-Version` values with HTTP 400. For compatibility with clients predating the header, an omitted header defaults to `2025-03-26`. The newer stateless `2026-07-28` protocol is not implemented by this legacy request lifecycle.
 
 ## Development
 
