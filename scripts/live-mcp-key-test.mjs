@@ -362,8 +362,22 @@ async function main() {
   assert.ok(Number.isInteger(callbackPort) && callbackPort > 0 && callbackPort <= 65535);
   const redirectUri = `http://127.0.0.1:${callbackPort}/callback`;
   const clientId = await getClient(redirectUri);
+  const args = process.argv.slice(2);
+  let selectedKey;
+  if (args.length) {
+    if (args.length !== 2 || args[0] !== "--key" || !["KEY_1", "KEY_2"].includes(args[1])) {
+      throw new Error("Usage: npm run test:live-keys -- --key KEY_1|KEY_2 (or omit arguments for the full controlled test)");
+    }
+    selectedKey = args[1];
+  }
 
   console.log("SyrianFatora live MCP test — credential values and customer data are never printed.");
+  if (selectedKey) {
+    console.log(`${selectedKey}: read-only diagnostic run.`);
+    await runReadOnly(selectedKey, keys.get(selectedKey), clientId, redirectUri);
+    console.log(`${selectedKey}: DIAGNOSTIC READ PASSED.`);
+    return;
+  }
   console.log("KEY_1 and KEY_2: read-only; KEY_3: isolated item write lifecycle.");
   await runReadOnly("KEY_1", keys.get("KEY_1"), clientId, redirectUri);
   await runReadOnly("KEY_2", keys.get("KEY_2"), clientId, redirectUri);
