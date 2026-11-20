@@ -81,11 +81,13 @@ The script:
 4. Calls authenticated MCP `initialize`, `notifications/initialized`, and `tools/list`; verifies the 51-tool catalogue.
 5. Calls only `customers_list` with `per_page=1` and verifies a successful upstream HTTP response.
 
-The test never requests `mcp:write`, never performs create/update/delete operations, and does not print or persist the access token, API key, or returned customer records. The API-key validation step in the Auth Worker and the final customer-list call both consume the provider's read quota. The test creates a dynamic OAuth client registration that remains in the Auth Worker KV until the configured registration TTL expires (currently 90 days); there is no client-unregistration endpoint in this integration.
+The test never requests `mcp:write`, never performs create/update/delete operations, and does not print or persist the access token, API key, or returned customer records. The API-key validation step in the Auth Worker and the final customer-list call both consume the provider's read quota. The script uses a fixed loopback port (`43127` by default) and caches only the public OAuth client ID and redirect URI in `~/.syrianfatora-smoke/client.json` (file mode `0600`); it does not cache tokens or API keys. It reuses that registration for up to 80 days and then creates a replacement. Each registration remains in Auth Worker KV until its configured TTL expires (currently 90 days); there is no client-unregistration endpoint in this integration. Override the callback port with `SMOKE_CALLBACK_PORT` or the local cache path with `SMOKE_CLIENT_CACHE` if needed.
 
 Optional environment overrides:
 - `AUTH_ORIGIN`: deployed authorization-server origin.
 - `MCP_ORIGIN`: deployed MCP resource-server origin.
+- `SMOKE_CALLBACK_PORT`: local callback port (default `43127`).
+- `SMOKE_CLIENT_CACHE`: local path for the non-secret OAuth client cache.
 
 This is intentionally a local/manual production verification, not a GitHub Actions job: the operator must approve the OAuth request and enter the API key in the browser. Do not put the API key or access token in GitHub Secrets, command-line arguments, source control, or CI logs. A successful run prints a final `PASS` line; failures print only bounded status/error information, not response bodies.
 
