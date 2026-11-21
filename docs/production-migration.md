@@ -117,10 +117,15 @@ This last step consumes SyrianFatora API quota and may return limited workspace 
 ### Evidence status as of 2026-11-21
 
 - Cloudflare API confirmed MCP v16 at 100% production traffic and Auth v12 at 100% production traffic.
-- MCP Build v16 completed the audit/build check and 53 MCP unit tests successfully.
+- MCP CI run `44846540308`: dependency audit, Worker build and MCP unit tests all passed.
+- Auth CI run `44846540312`: dependency audit, Worker build and Auth unit tests all passed.
 - Production settings and bindings for both Workers were inspected and matched source.
-- A live HTTP request from the connected execution environment could not be completed because outbound HTTP access was blocked before reaching the Workers. This is **not evidence of a Worker failure**.
-- No successful post-v16 authenticated MCP smoke is recorded yet. Complete the Windows checks above and append timestamp, status codes, MCP server version, tool count and sanitized outcome. Never include credentials, tokens or customer records.
+- Operator live checks from Windows PowerShell on 2026-11-21:
+  - MCP `GET /health`: **HTTP 200**, JSON `ok=true`, service `syrianfatora-mcp`, mode `oauth-resource-server`, `toolCount=51`.
+  - Auth `GET /health`: **HTTP 200**, JSON `ok=true`, service `syrianfatora-auth`, version `0.1.0`.
+  - MCP `POST /mcp` with JSON-RPC `initialize` and no Authorization header: **HTTP 401 Unauthorized**, with `WWW-Authenticate: Bearer`, protected-resource metadata URL and required scope `mcp:read`. This is the expected unauthenticated challenge and confirms the protected endpoint enforces authentication.
+- These checks confirm public routing, liveness and the unauthenticated auth gate. They do **not** prove OAuth authorization/code exchange, token issuance/validation, Service Binding operation, or an authenticated MCP session.
+- A successful post-v16 authenticated MCP smoke is still outstanding. Complete the Authorization Code + PKCE procedure above with an explicitly approved test workspace and record sanitized outcomes. Never include credentials, tokens or customer records.
 
 ## Rollback
 
