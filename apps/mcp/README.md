@@ -53,7 +53,9 @@ npm test
 npm run dev
 ```
 
-The production deployment command is managed by the Cloudflare Build trigger. Do not deploy manually or use `--force` unless a separate production change has been explicitly approved.
+The MCP production Build trigger currently runs `npx cf workers versions create --prebuilt --mode production`. The equivalent package command is `npm run deploy:version`. This uploads a Worker Version from the already validated Build Output without changing production traffic. It does **not** promote that version automatically. This is intentional while the existing Worker has script-API deployment history: do not use `cf deploy --force` to bypass the ownership conflict.
+
+After a successful Build, inspect the uploaded version and its bindings in Cloudflare. Promote it only after an explicit release decision, using **Workers & Pages → syrianfatora-mcp → Deployments → Promote deployment**. Confirm the selected version and 100% traffic assignment, then run the read-only production smoke checks. Keep the previous known-good version available for rollback. Cloudflare documents this two-step workflow in [cf version upload and deployment commands](https://developers.cloudflare.com/cf/projects/) and [Worker deployment management](https://developers.cloudflare.com/workers/versions-and-deployments/deployment-management/).
 
 ## Operator-run production OAuth smoke
 

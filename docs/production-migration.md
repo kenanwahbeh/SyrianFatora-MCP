@@ -4,7 +4,7 @@
 
 **Status:** Production OAuth infrastructure deployed. A read-only OAuth smoke succeeded with `KEY_1` and `KEY_2`. On 2026-11-21, the operator authorized controlled MCP live tests against the designated test workspace, including a temporary item write lifecycle through MCP. This testing GO is not a full release-readiness sign-off; client-side disconnect verification and user-facing credential replacement remain outstanding.
 
-## Current production state — 2026-11-20
+## Current production state — 2026-11-21
 
 | Item | Verified production value |
 | --- | --- |
@@ -15,8 +15,8 @@
 | Auth immediate rollback | v7 `5f9fe79d-1799-4a66-8f25-868f149dcd7a` / `d07905f9-b987-4946-88cf-8accd662c1d3` |
 | Existing MCP Worker | `syrianfatora-mcp` (migrated in place) |
 | MCP resource URL | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
-| MCP version / deployment | v11 `a1dcd66c-1a5c-48d1-bc1d-f63b1962d950` / `01fa136b-96b9-436d-be33-165390c6a099` (100% traffic; `IS_PREVIEW=false`) |
-| MCP immediate rollback | v10 `8b7e8158-b175-44fe-98d5-4f151eef51f2` / `1c27f7ac-ee02-47a8-9b5e-b28044f7e526` (100% traffic before v11; retains the Preview cleanup) |
+| MCP version / deployment | v15 `5469a3d0-9b01-4803-ad00-4c6813df3e2c` / `6d82978e-52cd-4442-a05c-cc9d8b595668` (100% traffic; `IS_PREVIEW=false`; last verified 2026-11-21) |
+| MCP immediate rollback | v14 `5367ee50-0746-4091-b5aa-b342bef7611e` / `c54db451-c2a3-44a8-9fe7-689811b7383d` (previous known deployment; verify deployment state before rollback) |
 | MCP pre-migration baseline | v4 `ab4d6f5c-a8d9-4150-a6a0-120499a2b9c5` (captured before code migration; secret already present) |
 | OAuth KV | `syrianfatora-oauth-production`, `d19d9bd755c349f688cd55e299b8168f` |
 | SQLite Durable Object | `CredentialRateLimiter`, namespace `1303fb3e6d25453080035c0356b4d4bd` |
@@ -97,18 +97,36 @@ Before the in-place cutover, the live legacy MCP Worker script was retrieved rea
 
 This verified the pre-migration source archive against the legacy live script. It did not by itself preserve all Worker metadata or deployment configuration; the settings, bindings, version details, and deployment metadata were also captured before the production overwrite.
 
-## Previous failed deployment — 2026-11-18
+## Deployment ownership and safe release workflow
 
-The Cloudflare Build completed checkout, dependency installation, and `npm run build:check`, then aborted during deploy.
+The existing MCP Worker has a history of uploads through the Workers Script API. Cloudflare's `cf deploy` command intentionally stops in non-interactive CI when it detects that provenance, because deploying the local Build Output could replace remote script/API-managed code and configuration. Do not bypass this check with `--force`.
 
-The reported conflict was:
+### Incident — Cloudflare Build #a10316ec (2026-11-21)
 
-- Configured Worker name: `syrianfatora-mcp-oauth-preview`
-- Cloudflare CI target Worker: `syrianfatora-mcp`
-- The live Worker was last updated through the script API.
-- Cloudflare warned that a CLI upload would override script-API edits and aborted, suggesting `cf deploy --force`.
+- Repository commit: `9a7085580b7b13d92f7f498202266ae84733063b` (PR #57).
+- Build and validation completed successfully: dependency audit, `cf build`, and all 53 MCP tests passed.
+- The deploy command `npx cf deploy --prebuilt --mode production` stopped before upload with the Script API provenance conflict.
+- No Worker Version was uploaded by this build, and no production deployment or traffic change was made.
+- This is a deployment ownership conflict, not an application/test failure.
 
-No successful production overwrite was reported from this failed build. The later in-place migration was separately reviewed after the live MCP script/version and rollback reference were captured. Any `--force` use was a one-time migration exception, not a standing deployment setting. A read-only inspection on 2026-11-20 confirmed that both current production Cloudflare Build triggers deploy with `npx cf deploy --prebuilt --mode production` and contain no `--force`.
+### Chosen release model — upload first, promote separately
+
+Use Cloudflare's documented two-step version workflow for the MCP Worker:
+
+1. Workers Builds runs the existing audit, build check, and unit tests.
+2. Its deploy command runs `npm run deploy:version`, which calls `cf workers versions create --prebuilt --mode production`.
+3. This creates an immutable Worker Version but does not create a deployment or change production traffic.
+4. Inspect the uploaded version and its bindings/configuration. Promote it only after an explicit release decision through **Workers & Pages → syrianfatora-mcp → Deployments → Promote deployment**.
+5. After promotion, verify the active deployment/version and run read-only production smoke checks. Keep the previous known-good version available for rollback.
+
+This keeps `cloudflare.config.ts` as the source of truth for MCP code/configuration, avoids a standing `--force` override, and separates CI validation/version upload from production release authorization. Do not use `cf deploy --force`, the Script Upload API, or a second deployment workflow as a routine fallback.
+
+Cloudflare references:
+- [Cloudflare CLI: upload a Worker Version and create a deployment](https://developers.cloudflare.com/cf/projects/)
+- [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
+- [Worker deployment management](https://developers.cloudflare.com/workers/versions-and-deployments/deployment-management/)
+
+Historical note: the 2026-11-18 failed build also encountered a Worker-name mismatch (`syrianfatora-mcp-oauth-preview` vs `syrianfatora-mcp`) before the in-place migration. That historical mismatch was corrected in `cloudflare.config.ts`; it is distinct from the 2026-11-21 Script API provenance conflict.
 
 ## Cloudflare Build triggers
 
@@ -127,10 +145,10 @@ No successful production overwrite was reported from this failed build. The late
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/mcp`
 - Build: `npm audit --audit-level=high && npm run build:check && node --test`
-- Deploy: `npx cf deploy --prebuilt --mode production` (verified 2026-11-20; no `--force`)
+- Current deploy setting (read back after update on 2026-11-21): `npx cf workers versions create --prebuilt --mode production` (uploads a version only; does not promote production). Equivalent package script: `npm run deploy:version`.
 - Paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
 
-Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production deployments. The deploy command on each trigger contains no `--force`; any future one-time migration exception must be explicitly approved and must not be persisted in the trigger.
+Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production builds. Auth retains its existing deployment workflow. The MCP trigger now uploads Worker Versions only; production promotion is a separate, explicitly approved release action. The MCP deploy setting was read back and verified after the change. No standing `--force` override is permitted.
 
 ## Execution log
 
@@ -388,3 +406,14 @@ The Cloudflare deployment inspection confirms version assignment and traffic per
 - Cloudflare invocation logs for the probe show the MCP requests were served by version #15, with successful Worker outcomes. No `mcp.upstream_failure` or `mcp.upstream_redirect` event was recorded for this probe.
 - This confirms the read path worked on the diagnostic build. It does **not** prove the original transport failure was caused by redirect handling: the prior failures occurred on version #14, and the second-round probe succeeded without a redirect diagnostic. The original failure may have been transient or environmental; root cause remains unconfirmed.
 - Do not run more live-key probes or write tests without separate approval. Keep version #15 in place while reviewing whether to retain or remove the temporary diagnostic instrumentation in a separately approved change.
+
+
+## MCP version-upload workflow update — 2026-11-21
+
+- Updated `apps/mcp/package.json` with `deploy:version`: `cf workers versions create --prebuilt --mode production`.
+- The MCP Build trigger was changed to `npx cf workers versions create --prebuilt --mode production` and read back successfully. The equivalent package script is `npm run deploy:version`.
+- Updating the Build trigger did not upload a Worker Version, promote a deployment, change bindings/secrets, or alter production traffic.
+- The next normal main-branch build will create a Worker Version only. Do not retry the failed `cf deploy` command and do not use `--force`.
+- Promotion remains manual and requires a separate release decision. Verify the candidate version's bindings, then promote and perform read-only health/OAuth/MCP checks.
+
+- Cloudflare MCP Build trigger `593221cf-b17a-4506-979a-ebb7f4307c69` deploy command changed from `npx cf deploy --prebuilt --mode production` to `npx cf workers versions create --prebuilt --mode production`; GET read-back confirmed the new value. No build retry or Worker upload was performed as part of this setting change.
