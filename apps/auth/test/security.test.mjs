@@ -27,22 +27,37 @@ test("consent UI selects only required scopes by default", () => {
 
 test("accepts only supported consent scopes and preserves the required read scope", () => {
   assert.deepEqual(
-    validateConsentScopes(["mcp:read", "mcp:write", "mcp:read"], ["mcp:read", "mcp:write", "offline_access"]),
+    validateConsentScopes(["mcp:read", "mcp:write", "mcp:read"], ["mcp:read", "mcp:write", "offline_access"], ["mcp:read", "mcp:write", "offline_access"]),
     ["mcp:read", "mcp:write"],
   );
 });
 
 test("rejects unsupported consent scopes", () => {
   assert.throws(
-    () => validateConsentScopes(["mcp:read", "admin"], ["mcp:read", "mcp:write", "offline_access"]),
+    () => validateConsentScopes(["mcp:read", "admin"], ["mcp:read", "mcp:write", "offline_access"], ["mcp:read"]),
     (error) => error instanceof CredentialValidationError && error.code === "invalid_scope",
   );
 });
 
 test("rejects consent without the required read scope", () => {
   assert.throws(
-    () => validateConsentScopes(["mcp:write"], ["mcp:read", "mcp:write", "offline_access"]),
+    () => validateConsentScopes(["mcp:write"], ["mcp:read", "mcp:write", "offline_access"], ["mcp:read", "mcp:write"]),
     (error) => error instanceof CredentialValidationError && error.code === "required_scope_missing",
+  );
+});
+
+
+test("rejects supported scopes that the OAuth client did not request", () => {
+  assert.throws(
+    () => validateConsentScopes(["mcp:read", "mcp:write"], ["mcp:read", "mcp:write", "offline_access"], ["mcp:read"]),
+    (error) => error instanceof CredentialValidationError && error.code === "scope_not_requested" && error.status === 400,
+  );
+});
+
+test("allows a subset of the scopes actually requested by the OAuth client", () => {
+  assert.deepEqual(
+    validateConsentScopes(["mcp:read"], ["mcp:read", "mcp:write", "offline_access"], ["mcp:read", "mcp:write", "offline_access"]),
+    ["mcp:read"],
   );
 });
 
