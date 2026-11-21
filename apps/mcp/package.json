@@ -9,6 +9,7 @@
     "build": "cf build",
     "build:check": "cf build",
     "deploy:preview": "./node_modules/.bin/cf previews deploy",
+    "deploy:version": "cf workers versions create --prebuilt --mode production",
     "test": "node --test",
     "smoke:oauth": "node ../../scripts/production-oauth-smoke.mjs",
     "test:live-keys": "node ../../scripts/live-mcp-key-test.mjs"
