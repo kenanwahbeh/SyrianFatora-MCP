@@ -4,7 +4,7 @@
 
 **Status:** Production OAuth infrastructure deployed. A read-only OAuth smoke succeeded with `KEY_1` and `KEY_2`. On 2026-11-21, the operator authorized controlled MCP live tests against the designated test workspace, including a temporary item write lifecycle through MCP. This testing GO is not a full release-readiness sign-off; client-side disconnect verification and user-facing credential replacement remain outstanding.
 
-## Current production state — 2026-11-20
+## Current production state — 2026-11-21
 
 | Item | Verified production value |
 | --- | --- |
