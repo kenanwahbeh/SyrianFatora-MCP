@@ -141,10 +141,9 @@ test("consent rejects a supported scope that was not requested and reissues a sa
   });
 
   assert.equal(escalated.status, 400);
-  assert.match(await escalated.text(), /not requested by this application/);
+  const retryHtml = await escalated.text();
+  assert.match(retryHtml, /not requested by this application/);
   assert.equal(outboundRequests.length, 0, "scope escalation must be rejected before API-key validation");
-
-  const retryHtml = await escalated.clone().text();
   const retryHandle = retryHtml.match(/name="handle" value="([^"]+)"/)?.[1];
   assert.ok(retryHandle);
   assert.notEqual(retryHandle, handle, "the consumed one-time handle must be replaced");
