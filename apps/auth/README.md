@@ -24,7 +24,7 @@ Possession of the Workspace API key is used as the initial proof of workspace ac
 - Service Binding entrypoint: `SyrianFatoraAuth`
 - OAuth provider: `@cloudflare/workers-oauth-provider@1.2.4`
 
-Production version IDs, KV/DO namespace identifiers, and rollback references belong in the [production migration runbook](../../docs/production-migration.md).
+Production version IDs, KV/DO namespace identifiers, and rollback references belong in the [production migration runbook](../../docs/production-migration.md). The latest documented Auth baseline is v8; the MCP v16 Build on 2026-11-21 was MCP-only and did not rebuild or redeploy Auth. Re-read Cloudflare before relying on that Auth version as current.
 
 ## Authorization protections
 

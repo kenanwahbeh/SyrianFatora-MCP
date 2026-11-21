@@ -14,10 +14,10 @@ Own the production-readiness workstream for `kenanwahbeh/SyrianFatora-MCP`. Move
 
 ## Mandatory context
 
-1. Read `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, relevant `docs/`, and Issue #15 plus its child issues before work.
+1. Read `AGENT.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, relevant `docs/`, and the current relevant GitHub issue/PR before work. Treat historical issue numbers and old task notes as context, not current status.
 2. Inspect current source, tests, workflows, configuration, and git state. Do not trust old documentation/comments as proof of current live Cloudflare state.
 3. Preserve the architecture: existing MCP Worker `syrianfatora-mcp` stays the resource server and is migrated in place; separate OAuth Worker `syrianfatora-auth`; Service Binding between them; OAuth 2.1 Authorization Code + PKCE; preserve all existing 51 MCP tools and upstream semantics unless a specifically approved issue says otherwise.
-4. README/runbook record end-to-end OAuth and live migration verification as outstanding. Re-check evidence before reporting status.
+4. Current production record: MCP v16 is deployed at 100% traffic. The v16 Build passed audit, build check and 53 MCP tests, but a post-v16 authenticated MCP smoke is still outstanding. The Auth v8 values are the last documented baseline; the MCP v16 Build did not redeploy Auth. Re-check the canonical `docs/production-migration.md` before reporting live status.
 
 ## Mission
 
@@ -80,7 +80,7 @@ Do not recommend **GO** until there is explicit evidence for:
 - Migration plan preserving `syrianfatora-mcp` identity and a verified rollback reference.
 - Human approval for the exact Production deployment/change.
 
-A passing build alone is not production readiness.
+A passing build alone is not production readiness. The one-time explicitly approved `cf deploy --prebuilt --mode production --force` migration on 2026-11-21 is historical and must not become the routine Build trigger command; the permanent MCP trigger is version-upload-only.
 
 ## Finding format
 

@@ -1,111 +1,68 @@
-# Implementation status and controlled live-test gates
+# Implementation status and release gates
 
-**Last updated:** 2026-11-21
+**Updated:** 2026-11-21
 
-**Testing decision (2026-11-21): GO** for controlled real-key MCP integration tests against the operator-designated test workspace. This is not a full release-readiness sign-off. The Auth v8 lifecycle correction is deployed; client-side disconnect verification and user-facing credential replacement remain open.
-**Source of truth for deployed IDs and production probes:** [production migration runbook](production-migration.md).
+## Current verified state
 
-## Deployed production baseline
+The current source on `main` contains the OAuth-protected MCP resource server and the separate OAuth authorization Worker. The MCP Worker was deployed to production as version v16 on 2026-11-21.
 
-| Component | Current production state |
+| Item | Verified value |
 | --- | --- |
-| Auth Worker | `syrianfatora-auth`, version #8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532`, deployment `4bd65dcd-240e-44f7-b2db-c025a0b51a05` (100% traffic) |
-| MCP Worker | `syrianfatora-mcp`, version #11 `a1dcd66c-1a5c-48d1-bc1d-f63b1962d950`, deployment `01fa136b-96b9-436d-be33-165390c6a099` (100% traffic; `IS_PREVIEW=false`) |
+| Repository | `kenanwahbeh/SyrianFatora-MCP` |
+| Main source commit deployed | `7cfa1e84d7e825aa08bf4b8f5b10c5b18b7c106a` |
+| MCP Worker | `syrianfatora-mcp` |
+| MCP version | v16 |
+| MCP version ID | `bfe9cbad-f08c-4f67-9fc9-23136fe9f2ae` |
+| MCP deployment ID | `9a33a35e-d8ab-473b-8e33-51a13b346a8c` |
+| Traffic assignment | 100% to v16 |
 | MCP endpoint | `https://syrianfatora-mcp.kinan-api.workers.dev/mcp` |
-| OAuth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
-| MCP catalogue | 51 tools |
-| Main-branch tests | Auth 43; MCP 24 |
-| Dependency audit | 0 high-severity vulnerabilities |
+| Auth issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
+| MCP tools in source | 51 across 12 resources |
+| MCP Build | `72694a25-7494-4775-8f2c-9a2b069f78e5`, success |
+| MCP tests in that Build | 53 passed, 0 failed |
+| Build audit/build check | completed successfully |
+| Post-v16 authenticated MCP smoke | Not yet recorded |
 
-Production health, OAuth discovery, protected-resource metadata, MCP tool count, and invalid-token rejection have passed. In addition, the operator confirmed that a production read-only OAuth Authorization Code + PKCE smoke completed successfully with two real Workspace keys (`KEY_1` and `KEY_2`), including authenticated MCP initialization, tool discovery, and `customers_list`.
+The Build log confirmed the MCP upload, Worker deployment, 6 ms startup time, and the `AUTH_SERVER` and `RATE_LIMITER` bindings. A successful Build/deployment is not evidence that authenticated MCP operations have passed after v16.
 
-## Completed implementation
+The Auth Worker was last documented as v8 in the earlier production record. The v16 Build was MCP-only and did not rebuild or redeploy Auth. Consult the production runbook before relying on Auth version metadata.
 
-- [x] Preserve the existing `syrianfatora-mcp` Worker and migrate it in place.
-- [x] Deploy the separate `syrianfatora-auth` OAuth authorization Worker.
-- [x] Connect MCP to Auth through the `AUTH_SERVER` Service Binding.
-- [x] Implement Authorization Code + PKCE, Dynamic Client Registration, Client ID Metadata Document support, and `mcp:read` / `mcp:write` scope enforcement.
-- [x] Keep the Workspace API key in provider-encrypted grant properties; do not expose it to the MCP client.
-- [x] Preserve all 51 MCP tools and their upstream semantics.
-- [x] Keep authorization-attempt abuse protection and provider-directed 429 cooldown only; do not meter ordinary MCP requests locally.
-- [x] Verify the SQLite Durable Object concurrency behavior and provider-directed cooldown tests.
-- [x] Deploy the OAuth consent retry fix to Auth v6; PR #49 is merged to `main`.
-- [x] Verify the live Auth and MCP production health/discovery probes and the production build pipeline.
-- [x] Merge the scope-aware refresh-token consent correction in PR #54 and deploy it to Auth Worker v8; Auth tests cover optional `offline_access`, rotation, grant isolation, and revocation.
+## Implemented capabilities
 
-## Ordered pre-Workspace gates
+- [x] Preserve the production MCP Worker identity and endpoint.
+- [x] Separate OAuth authorization service using Authorization Code + PKCE.
+- [x] Dynamic Client Registration and Client ID Metadata Document support.
+- [x] Required `mcp:read` and optional write scope enforcement.
+- [x] Optional `offline_access`-aware refresh-token issuance.
+- [x] Provider-encrypted OAuth grant properties for upstream credentials.
+- [x] Isolated grants; no inferred Workspace identity or implicit grant replacement.
+- [x] Strict REST request schemas for 12 resources.
+- [x] Exact payment void request field `void_reason`.
+- [x] Authorization-attempt abuse protection and provider-directed 429 cooldown.
+- [x] MCP request validation, origin checks, size bounds, timeout and credential redaction.
+- [x] Independent Auth and MCP test/build workflows.
 
-These implementation and release-readiness gates remain tracked in order. The operator's 2026-11-21 GO decision separately authorizes controlled MCP integration tests against the designated test workspace while the remaining product-release work continues.
+## Outstanding verification and product work
 
-### 1. Deployment gate — remove automatic `--force`
+- [ ] Run post-v16 read-only production smoke: health, protected-resource metadata, invalid-token rejection, OAuth discovery, authenticated initialize and tools/list.
+- [ ] Run a safe authenticated read-only tool check only with an explicitly approved test credential/workspace.
+- [ ] Verify the production Auth Worker version/bindings if any Auth change is proposed; the MCP-only Build does not establish Auth deployment state.
+- [ ] Verify actual ChatGPT/client RFC 7009 revocation behavior.
+- [ ] Define user-facing disconnect and credential-replacement management.
+- [ ] Decide whether a trustworthy stable Workspace identifier is available before implementing cross-grant replacement.
 
-- [x] Read-only inspection confirms both current production Cloudflare Build deploy commands are `npx cf deploy --prebuilt --mode production` with no `--force`.
-- [x] Both triggers are path-scoped to their own application directories and target `main`.
-- [x] Merge the deployment-policy/runbook clarification in PR #50; both live triggers remain free of `--force`.
-- [x] Policy prohibits `--force` in automatic triggers; any exceptional one-time migration requires separate explicit approval, a captured baseline, a verified artifact, and a rollback plan.
+## Deployment policy
 
-**Evidence:** PR #50 merged to `main`; live Cloudflare Build triggers were rechecked after merge.
+The MCP Build trigger's permanent command is `npx cf workers versions create --prebuilt --mode production`. It uploads an immutable version without assigning production traffic. Promotion is a separate action requiring explicit operator approval.
 
-### 2. Smoke Test implementation — prepare authenticated MCP tool coverage
+A one-time migration used `cf deploy --prebuilt --mode production --force` after explicit approval because the existing Worker had Script API deployment ownership. The trigger was restored to the version-only command and verified. Do not make `--force` a routine or automatic deployment path.
 
-- [x] Implemented the operator-run script for OAuth Authorization Code + PKCE, loopback callback capture, and `mcp:read` only.
-- [x] Implemented authenticated MCP calls in the script: `initialize`, `notifications/initialized`, `tools/list`, and read-only `customers_list` with `per_page=1`.
-- [x] A local mocked integration test exercises registration, state, PKCE, session handling, tool discovery, and the read-only tool call without a real key or production request.
-- [x] Confirmed that the script and mock test are implementation evidence only; separately, a real production OAuth smoke was later run successfully with two real Workspace keys (`KEY_1` and `KEY_2`).
-- [x] Merge the smoke cache fix and local integration harness in PR #51; the MCP suite on `main` now includes the local mock OAuth/MCP flow test.
-**Historical execution note:** The real production OAuth smoke was run successfully with `KEY_1` and `KEY_2`. On 2026-11-21, the operator explicitly changed the testing decision to GO for controlled MCP tests against the designated test workspace. This permission does not close the remaining release-readiness gates.
+## Test evidence rules
 
-**Evidence:** PR #51 merged to `main`; MCP tests pass 24/24. The local mock test is not production OAuth evidence.
+- The MCP v16 Build ran 53 MCP tests successfully.
+- Auth has a separate test workflow and package; do not claim an MCP Build ran Auth tests.
+- Mocked tests are not live production OAuth evidence.
+- A deployment confirmation is not an authenticated end-to-end smoke result.
+- Live write tests require explicit authorization for the designated test workspace, uniquely marked temporary data, a verified cleanup path and grant revocation. Never test by creating a customer, invoice or payment that cannot be safely removed; never void a real payment.
 
-### 3. Remove Preview artifacts from the Production interface
-
-- [x] Recorded the pre-cleanup production response: `/oauth/client-metadata.json` exposed `SyrianFatora Preview E2E Client` and a placeholder `example.com` redirect URI.
-- [x] Implemented the production 404 gate, retained the CIMD test document only in Preview, and removed the Preview suffix from the production MCP server version.
-- [x] Merge PR #52 and verify the automatic Cloudflare Build deployment.
-- [x] Verify production `/oauth/client-metadata.json` returns 404 and the live Worker binding has `IS_PREVIEW=false`.
-- [x] Preserve the isolated Preview Worker and its Preview-only CIMD test path; no Preview resources were deleted.
-
-**Evidence:** PR #52 merged; Cloudflare Build `249f8daf-d0c8-41dc-8f9c-91a7d9cb7ff5`, MCP v10 deployment `1c27f7ac-ee02-47a8-9b5e-b28044f7e526`. Immediate rollback v9 reintroduces the Preview metadata route.
-
-### 4. Unify documentation and release history
-
-- [ ] Review and merge this documentation update after confirming current Cloudflare versions, deployments, build IDs, test counts, rollback targets, and outstanding Preview cleanup status.
-- [ ] Keep `docs/production-migration.md` as the canonical source for deployed version IDs, deployment IDs, probes, and rollback references.
-- [ ] Keep the root and package READMEs as concise summaries that link to the canonical runbook.
-
-### 5. Review credential separation and revocation
-
-- [x] Confirmed the Workspace key is stored in provider-encrypted grant `props` and returned only to the internal MCP resource Worker after token validation; raw keys are not used as limiter identifiers.
-- [x] Confirmed revocation semantics: access-token revocation removes that token only; refresh-token revocation removes the full grant and encrypted props.
-- [x] Confirmed each authorization is an independent grant. Reauthorizing the same OAuth client does not replace an earlier key because no stable Workspace identifier is available.
-- [x] Identified and corrected the mismatch between optional `offline_access` consent and refresh-token issuance.
-- [x] Merge PR #54 (`75c8f0616f8eea1526d4bfda559a8fc9ce456525`); Auth Worker v8 is deployed with 100% traffic.
-- [x] Add isolated regression coverage for no-refresh when `offline_access` is absent, refresh-token rotation, grant isolation, access-token revocation, and full grant revocation.
-- [ ] Decide and implement the supported user-facing disconnect/replacement procedure. Whether ChatGPT sends RFC 7009 revocation on disconnect remains unverified.
-
-**Evidence:** [PR #54](https://github.com/kenanwahbeh/SyrianFatora-MCP/pull/54) is merged. Cloudflare Auth v8 `25c25a69-9fb2-4c75-b07b-a1cf00a49532`, deployment `4bd65dcd-240e-44f7-b2db-c025a0b51a05` (100% traffic). The deployment was created automatically after the merge; this documentation task did not deploy or modify Workers.
-
-### 6. Controlled real OAuth test — read and scoped write
-
-**Historical evidence:** The operator confirmed that the production OAuth Authorization Code + PKCE flow was successfully completed with two real Workspace keys (`KEY_1` and `KEY_2`). Each authorization used `mcp:read` only and completed authenticated MCP `initialize`, `notifications/initialized`, `tools/list`, and `customers_list` with `per_page=1`. No write operation was run and no key value or customer record is retained in this repository.
-
-This historical read-only test is retained as evidence. The operator subsequently authorized controlled live MCP testing against the designated test workspace on 2026-11-21. The authorization is limited to the test procedure below and does not imply full release readiness.
-
-- [x] For the completed smoke, the user entered each real Workspace API key only on the first-party HTTPS Auth authorization page; no key value was copied into chat, a shell command, GitHub, or logs.
-- [x] Approved only `mcp:read` for both key sessions.
-- [x] Completed OAuth Authorization Code + PKCE and verified access-token issuance for both sessions. **Refresh-token lifecycle was not established by this smoke.**
-- [x] Executed authenticated `initialize`, `notifications/initialized`, `tools/list`, and `customers_list` with `per_page=1` for both sessions.
-- [x] The smoke test did not print or persist API keys, access tokens, or returned customer records.
-- [x] Add `scripts/live-mcp-key-test.mjs` and `npm run test:live-keys`: `KEY_1`/`KEY_2` read-only checks and a `KEY_3` temporary item create/update/get/delete lifecycle through MCP only. The runner revokes temporary OAuth grants and never prints credentials or customer records.
-- [ ] Complete the live run and record its outcome. A failed run must not be described as a passed integration test.
-
-## Global stop conditions
-
-- Live-key testing is restricted to the operator-designated test workspace and the documented `test:live-keys` procedure.
-- Write operations may affect only the uniquely marked item created by the test runner; never modify or delete pre-existing records.
-- Do not run broad write tests, payment operations, invoice publication, or operations against other workspaces.
-- No merge or production deployment without separate explicit approval.
-- No deletion of Preview Workers, Preview environments, or related resources as part of interface cleanup.
-- Never persist `--force` in automatic CI or Cloudflare Build production triggers.
-- If live version, bindings, secrets, endpoint identity, or rollback reference cannot be verified, stop.
-- Never record API keys, access tokens, refresh tokens, signing keys, or Cloudflare credentials in this repository or conversation.
+Detailed production identifiers and the historical change log are in [production-migration.md](production-migration.md).

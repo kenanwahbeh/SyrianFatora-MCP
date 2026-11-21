@@ -1,6 +1,6 @@
 # SyrianFatora credential separation and revocation review
 
-**Reviewed:** 2026-11-20
+**Reviewed:** 2026-11-21
 **Status:** PR #54 is merged and its correction is deployed in Auth Worker v8. Provider-level token lifecycle behavior is covered by isolated tests. User-facing disconnect and credential-replacement management remain outstanding.
 
 ## Scope and evidence
@@ -41,4 +41,4 @@ The Auth discovery document advertises the RFC 7009 revocation endpoint at `/oau
 1. Decide whether a supported stable Workspace identifier exists before designing cross-grant replacement. Do not derive Workspace identity from the API key itself or from a guessed endpoint.
 2. Define and document the supported user-facing disconnect/replacement flow, including the behavior when the client does not send a refresh-token revocation request.
 3. Verify ChatGPT/client-side RFC 7009 revocation behavior without using a real Workspace key.
-4. Keep further real Workspace-key tests blocked until the ordered release gates are formally closed.
+4. Any controlled real-key test requires explicit operator approval, a designated test workspace, narrowly scoped credentials, uniquely marked temporary data where writes are involved, verified cleanup and grant revocation. Routine production smoke remains read-only. The MCP v16 deployment has not yet had a post-deployment authenticated smoke recorded.
