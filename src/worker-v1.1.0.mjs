@@ -1,3 +1,20 @@
+/*
+ * LEGACY ARCHIVE — DO NOT DEPLOY.
+ *
+ * Historical v1.1.0 worker retained for reference only. It is not the
+ * supported production entrypoint and must not be used in Wrangler,
+ * CI/CD, or any new deployment configuration.
+ *
+ * SECURITY LIMITATIONS (intentionally preserved for historical reference):
+ * - Accepts a workspace API key directly as a Bearer token.
+ * - Returns upstream response details and raw error messages.
+ * - Does not implement the current OAuth, scope enforcement, and
+ *   hardened error-handling architecture.
+ *
+ * Use the maintained Workers under apps/ for all development and
+ * deployments. Any reuse of this file requires a security review and
+ * explicit migration; do not copy it into a production Worker.
+ */
 const BASE = "https://syrianfatora.com/api/public/v1";
 const RESOURCES = {
   customers:["list","get","create"], invoices:["list","get","create"],
