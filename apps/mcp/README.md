@@ -9,7 +9,9 @@ The OAuth-protected MCP resource server for SyrianFatora. It preserves the exist
 - Uses the upstream SyrianFatora API key only on the server side, from provider-encrypted grant properties.
 - Enforces `mcp:read` for MCP access and read operations.
 - Requires both `mcp:read` and `mcp:write` for create, update, and delete operations.
-- Preserves existing tool request/response semantics, including the payment-void reason requirement.
+- Defines per-resource request schemas in `src/rest-contract.mjs`, aligned to the supplied `page.html` REST reference; unknown filters/body fields are rejected before forwarding.
+- Validates documented field types, required fields, enums, date formats and quote/recurring date ordering.
+- Maps `payments_delete` argument `void_reason` to the exact REST DELETE JSON body field `void_reason`.
 - Applies bounded request handling and avoids returning the upstream API key in echoed responses.
 - Validates tool-call arguments against each published `inputSchema` before forwarding a request.
 - Validates browser `Origin` headers on `/mcp`; same-origin requests and explicitly configured origins are accepted, while absent Origin remains supported for native clients.
@@ -84,7 +86,9 @@ Optional environment variables:
 
 This is an operator-run production check, not a GitHub Actions job. The automated production workflow performs unauthenticated health/metadata checks and invalid-token rejection only. The local mocked integration test validates the script flow but is not evidence of a real production OAuth session.
 
-The two-key production read-only smoke (`KEY_1` and `KEY_2`) is recorded in the root README and production runbook. Further real-key tests remain NO-GO until release gates 1–5 are formally closed. Never test write operations against a real Workspace.
+The historical two-key read-only smoke (`KEY_1` and `KEY_2`) is recorded in the root README and production runbook. The operator authorized controlled real-key MCP testing on 2026-11-21 against the designated test workspace. Run `npm run test:live-keys` from this package to execute the full test runner, or `npm run test:live-keys -- --key KEY_1` / `--key KEY_2` for one read-only credential check. The single-key mode does not run any write operations. The runner reads `KEY_1`, `KEY_2`, and `KEY_3` from the repository-root `.env`; it does not print key values, access tokens, customer records, or API response bodies. `KEY_1` and `KEY_2` receive read-only scopes and run `customers_list` with `per_page=1`. `KEY_3` receives `mcp:read` and `mcp:write`, creates one clearly marked temporary item, updates and retrieves that same item, deletes only that item, and verifies it is absent. Each temporary OAuth grant requests `offline_access` solely so the runner can revoke the refresh token and remove the grant after the test. Workspace data operations are sent only as MCP `tools/call` requests; the runner does not call the SyrianFatora data API directly. This is controlled integration testing, not a full release-readiness sign-off. If the run fails before cleanup, inspect the warning and verify only the runner-created item; never delete unrelated records.
+
+The root-level `scripts/live-mcp-skills-test.mjs` exercises all reversible resource lifecycles, cross-key reads, and safe negative probes. It intentionally skips successful customer/invoice/payment creation and real payment voids because those operations cannot be safely reversed. Use `--payment-methods-only` for the non-mutating payment-method inventory or `--cleanup-only` to remove only uniquely marked leftovers from this test harness. This runner targets the deployed MCP URL by default; the current Production deployment must be updated before its `void_reason` probe can pass.
 
 ## Preview
 

@@ -1,8 +1,8 @@
 # Production migration runbook and execution log
 
-**Last updated:** 2026-11-20
+**Last updated:** 2026-11-21
 
-**Status:** Production OAuth infrastructure deployed. An operator-confirmed read-only OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Auth v8 now includes the merged scope-aware refresh-token correction. Further real-key testing remains NO-GO pending the ordered gates in `docs/implementation-plan.md`; client-side disconnect verification and user-facing credential replacement remain outstanding.
+**Status:** Production OAuth infrastructure deployed. A read-only OAuth smoke succeeded with `KEY_1` and `KEY_2`. On 2026-11-21, the operator authorized controlled MCP live tests against the designated test workspace, including a temporary item write lifecycle through MCP. This testing GO is not a full release-readiness sign-off; client-side disconnect verification and user-facing credential replacement remain outstanding.
 
 ## Current production state — 2026-11-20
 
@@ -288,17 +288,17 @@ For each key, the smoke used the first-party HTTPS Auth page and approved `mcp:r
 
 No create, update, or delete operation was performed. API key values, access tokens, and customer records are not included in this repository.
 
-**Scope of this evidence:** this confirms successful access-token issuance and authenticated read-only MCP execution for both keys. It does not establish refresh-token rotation, client/ChatGPT-side revocation, or user-facing disconnect/replacement behavior. The historical smoke was performed before gates 1–5 were all formally closed; it is recorded as evidence, not as authorization to continue real-key testing out of sequence.
+**Scope of this evidence:** this confirms successful access-token issuance and authenticated read-only MCP execution for both keys. It does not establish refresh-token rotation, client/ChatGPT-side revocation, or user-facing disconnect/replacement behavior. The historical smoke predates the 2026-11-21 testing decision. The operator's subsequent GO decision authorizes the controlled MCP test procedure only; it does not close release-readiness work.
 
-## Current NO-GO release gates
+## Remaining release-readiness work
 
-The ordered six-gate checklist is maintained in `docs/implementation-plan.md`. The historical two-key read-only smoke is recorded below. Do not run further real-key tests until all ordered gates are formally closed. Production write operations remain prohibited.
+The implementation and release-readiness checklist is maintained in `docs/implementation-plan.md`. The operator's GO decision authorizes only the controlled test runner against the designated test workspace. It does not authorize production deployment, broad writes, or changes to pre-existing records.
 
 ## Credential lifecycle finding — 2026-11-20
 
 A source review confirmed that the API key is stored in provider-encrypted grant `props`, and token validation returns those properties only to the internal MCP Worker. Access-token revocation removes only that token; refresh-token revocation deletes the full grant and encrypted properties. Reauthorization creates an independent grant because no stable Workspace identifier is available; it does not automatically replace an earlier key.
 
-**Superseded finding:** Auth v6 could issue a refresh token even when optional `offline_access` was not approved. PR #54 corrected this with a scope-aware token-exchange callback and added regression coverage. PR #54 is merged and the correction is deployed in Auth v8 (100% traffic). User-facing disconnect/replacement UX is still not implemented, and ChatGPT's disconnect/revocation behavior remains unverified. Further real Workspace-key testing remains NO-GO until the remaining ordered gates are closed.
+**Superseded finding:** Auth v6 could issue a refresh token even when optional `offline_access` was not approved. PR #54 corrected this with a scope-aware token-exchange callback and added regression coverage. PR #54 is merged and the correction is deployed in Auth v8 (100% traffic). User-facing disconnect/replacement UX is still not implemented, and ChatGPT's disconnect/revocation behavior remains unverified. These remain release-readiness items, but they do not block the operator-authorized controlled MCP integration test.
 
 
 ## Latest deployment state after PR #54 — 2026-11-20
@@ -315,3 +315,76 @@ Auth v8 was uploaded after PR #54 merge commit `75c8f0616f8eea1526d4bfda559a8fc9
 MCP v11's deployed bindings show `IS_PREVIEW=false`, the production `AUTH_SERVER` Service Binding, and the expected `RATE_LIMITER` Durable Object binding. MCP v10 remains the immediate rollback target and retains the Preview cleanup. MCP v9 remains unsafe as a direct rollback because it predates the Preview cleanup.
 
 The Cloudflare deployment inspection confirms version assignment and traffic percentages. It is not a substitute for a post-deployment end-to-end OAuth smoke. No real Workspace key was used during this deployment inspection, and no additional customer operation was performed. The historical two-key read-only smoke remains the only real-key end-to-end evidence recorded here.
+
+
+## Controlled live MCP test runner — 2026-11-21
+
+- Created `scripts/live-mcp-key-test.mjs` on branch `test/live-mcp-real-keys` and exposed it as `npm run test:live-keys` from `apps/mcp`.
+- The runner reads `KEY_1`, `KEY_2`, and `KEY_3` from the server-local root `.env`, submits them only to the first-party HTTPS OAuth consent endpoint, and never prints credential values or customer data.
+- `KEY_1` and `KEY_2` are scoped read-only. `KEY_3` is scoped `mcp:read` + `mcp:write` and is intended to create, update, retrieve, and delete only one uniquely marked test item.
+- Each temporary OAuth grant requests `offline_access` so the runner can revoke the refresh token and remove the grant after the test. Workspace data calls are MCP `tools/call` requests only; no direct data API call is made by the runner.
+- Local validation passed: `node --check`, `git diff --check`, and MCP unit tests 42/42.
+- First live attempt: OAuth authorization, MCP `initialize`, and `tools/list` (51 tools) completed for `KEY_1`. The first `customers_list` call failed with the MCP Worker's generic upstream fetch error. The script stopped before `KEY_2` or any write test; no item was created, updated, or deleted. The temporary OAuth grant cleanup returned successfully.
+- Result: live integration test remains **incomplete**. Investigate the upstream fetch failure before retrying; do not describe the run as passed. No Worker deployment, DNS change, secret change, or pre-existing workspace-record modification occurred.
+
+
+### Follow-up diagnosis of the first live failure — 2026-11-21
+
+- Cloudflare's read-only deployment inventory confirms the MCP Worker handling the failed attempt was production version `081a0704-4ef1-4f9e-b535-6b6407db7781`, deployed at 2026-11-20 21:47:47Z with 100% traffic. The relevant MCP invocation occurred at 2026-11-20 22:17:47Z.
+- The invocation reached the MCP Worker, passed token validation, and called the upstream-cooldown Durable Object. Its SQL read of `rate_cooldowns` completed; the MCP Worker returned HTTP 200 because the tool failure is represented inside the JSON-RPC result. This is not evidence that the upstream operation succeeded.
+- Source inspection narrows the generic message to an exception inside the upstream `fetch` / response-body-read block. A normal upstream HTTP error (for example 401/403/429/500) would instead be returned with its HTTP status in the tool payload; the generic message is emitted only by the catch block.
+- Read-only network probes from the VPS show DNS resolution and TLS verification succeed for `syrianfatora.com`; unauthenticated GET requests to `/api/public/v1/customers` and `/api/public/v1/items` return HTTP 401 with no redirect. This confirms the hostname and route are reachable from the VPS, but does not prove Cloudflare Worker egress reaches them the same way.
+- Cloudflare's stored invocation/trace data does not include the caught JavaScript exception details. The current catch block intentionally suppresses them, so the precise transport cause (Worker-side connection/DNS rejection, redirect, or response-stream failure) cannot be distinguished from existing logs.
+- No retry with real keys was made. No workspace data operation was repeated. No Cloudflare deployment or configuration change was made.
+- Next diagnostic requirement: add sanitized server-side exception telemetry (error class/name and safe cause code only; never URL query data, headers, credentials, tokens, or response bodies), then obtain explicit authorization for a controlled deployment before rerunning the MCP read call. Until then, do not guess the root transport cause or proceed to KEY_2 / KEY_3.
+
+
+### Sanitized transport diagnostics implemented locally — 2026-11-21
+
+- Added an `onUpstreamFailure` hook around the MCP upstream fetch and response-body read path.
+- Production Worker wiring emits one structured `console.error` event named `mcp.upstream_failure` with only: tool name, phase (`fetch` or `read_response_body`), sanitized error/cause name and code, configured timeout, and elapsed milliseconds.
+- Exception messages, request URLs/query strings, headers, API keys, OAuth tokens, customer data, and upstream response bodies are intentionally excluded.
+- The client-facing MCP error remains generic; the diagnostic callback is isolated so logging failure cannot change the response.
+- Added a regression test proving a transport cause code is retained while a synthetic secret and private URL in the exception message are not logged.
+- Validation: MCP tests 43/43 passed; `npm run build:check` succeeded; `git diff --check` succeeded.
+- This instrumentation exists only on the uncommitted test branch. It has not been deployed. Production logs will not contain this new diagnostic until a separately approved deployment is made.
+
+## Sanitized MCP transport diagnostic deployment and KEY_1 probe — 2026-11-21
+
+- Branch: `test/live-mcp-real-keys`; source commit at deployment: `2fc2cc9c9249350a69a7c58fdeff814d6aab1e84`.
+- MCP Worker version #14: `5367ee50-0746-4091-b5aa-b342bef7611e`.
+- Deployment: `c54db451-c2a3-44a8-9fe7-689811b7383d`; verified 100% traffic on version #14.
+- The upload preserved the existing `secret_text` binding via Cloudflare's keep-bindings mechanism. The secret value was not read or changed. Existing service and Durable Object bindings were also preserved.
+- A single controlled read-only MCP request was made with `KEY_1`: `customers_list`. OAuth authorization, token validation, MCP initialization, and tool discovery succeeded; the tool call returned the existing generic upstream failure. No other key was used and no write operation was attempted.
+- The new structured event was captured at `2026-11-20T22:33:23.689Z` UTC for `customers_list`, from version #14. It reports `phase=fetch`, `errorName=TypeError`, `durationMs=0`, and no safe `errorCode`, `causeName`, or `causeCode` fields. The failure therefore occurred while initiating the upstream fetch, before a response was received or its body was read. It is not an upstream HTTP status such as 401/403/429/500.
+- The request path is constructed against `https://syrianfatora.com/api/public/v1`; the fetch currently uses `redirect: "error"`. A redirect rejection remains one possible explanation, but the captured telemetry does not prove that. DNS, connection, TLS, URL, and redirect causes are not yet distinguished.
+- Follow-up script option `npm run test:live-keys -- --key KEY_1` was added and pushed in commit `3c49c42`; it runs only one read-only key and cannot reach the KEY_3 write test.
+- No existing workspace records were created, updated, or deleted. No secrets, bindings, DNS, or Worker settings were changed. No additional live-key request has been run after this probe.
+
+**Next diagnostic step:** add a narrowly allowlisted `errorMessageKind` classification (never raw exception text), and optionally capture a redirect response status with `redirect: "manual"` on a separately approved single read. Do not change redirect handling in production until the response behavior is established.
+
+
+### Second-round MCP transport diagnostics — 2026-11-21
+
+- Added an allowlisted `errorMessageKind` classifier (`fetch_failed`, `redirect_error`, `invalid_url`, `network_error`, or `unknown`). Raw exception text is never emitted.
+- Changed the upstream fetch to `redirect: "manual"` for this diagnostic build so a redirect is returned as a 3xx response rather than silently followed or rejected. The tool result exposes only the HTTP status and bounded response body; the diagnostic event records only the status and a validated destination hostname, never the Location URL or query string.
+- Added regression tests for message classification, redirect handling, and the absence of secret/query leakage.
+- This second-round diagnostic build is intended for one read-only `KEY_1` probe. No write test, other key, secret, binding, DNS, or Durable Object setting is in scope.
+
+### Second-round deployment and probe outcome — 2026-11-21
+
+- Branch commit `99346f6` was pushed to `origin/test/live-mcp-real-keys`. MCP unit tests passed 45/45; `npm run build:check` and `git diff --check` succeeded.
+- The local `cf deploy` CLI could build but had no local authentication token. The already-authorized Cloudflare API connection was used for the same targeted upload; no API token was copied to the VPS.
+- Uploaded MCP Worker version #15: `5469a3d0-9b01-4803-ad00-4c6813df3e2c`; deployment `6d82978e-52cd-4442-a05c-cc9d8b595668`; verified 100% traffic assigned to version #15.
+- The upload used `keep_bindings: ["secret_text"]`; a read-only version inspection confirmed the existing `RATE_LIMIT_HMAC_SECRET` binding, service binding, Durable Object binding, and production text bindings remain present. The secret value was not read or changed.
+- One `KEY_1` read-only `customers_list` probe was attempted after upload and failed with the generic client error. Its structured log at `2026-11-20T22:52:46.014Z` identifies Worker version #14 (`5367ee50-0746-4091-b5aa-b342bef7611e`), not the newly assigned version #15. The request was served by the previous version during deployment propagation; therefore this probe does not validate the second-round code.
+- No `mcp.upstream_redirect` event was recorded. Because the request reached version #14, this is not evidence about redirect behavior in version #15. No additional live-key request or workspace write was performed.
+- Next action requires one further explicitly approved read-only `KEY_1` probe after confirming version #15 is serving requests. Do not repeat automatically.
+
+### Second-round read-only probe completed — 2026-11-21
+
+- After confirming deployment `6d82978e-52cd-4442-a05c-cc9d8b595668` still assigned 100% traffic to version #15 (`5469a3d0-9b01-4803-ad00-4c6813df3e2c`), ran exactly one `KEY_1` read-only diagnostic: OAuth authorization, MCP initialize, tools/list (51), and `customers_list` with `per_page: 1`.
+- Result: PASS; process exited 0. OAuth grant cleanup completed. No customer values or credential material were printed. No write tool was invoked.
+- Cloudflare invocation logs for the probe show the MCP requests were served by version #15, with successful Worker outcomes. No `mcp.upstream_failure` or `mcp.upstream_redirect` event was recorded for this probe.
+- This confirms the read path worked on the diagnostic build. It does **not** prove the original transport failure was caused by redirect handling: the prior failures occurred on version #14, and the second-round probe succeeded without a redirect diagnostic. The original failure may have been transient or environmental; root cause remains unconfirmed.
+- Do not run more live-key probes or write tests without separate approval. Keep version #15 in place while reviewing whether to retain or remove the temporary diagnostic instrumentation in a separately approved change.

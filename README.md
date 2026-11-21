@@ -17,9 +17,9 @@ The production deployment consists of two Workers:
 
 OAuth uses Authorization Code with PKCE. The upstream API key is passed to the resource server only through provider-encrypted grant properties after token validation.
 
-## Production status — 2026-11-20
+## Production status — 2026-11-21
 
-**Status: deployed for controlled testing; further real-key testing is NO-GO.**
+**Status: deployed; GO for controlled MCP live tests in the designated test workspace (operator decision, 2026-11-21). This is not a full release-readiness sign-off.**
 
 - Production health, OAuth discovery, protected-resource metadata, and invalid-token rejection (HTTP 401) passed.
 - An operator-confirmed production Authorization Code + PKCE smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Both sessions approved `mcp:read` and completed authenticated MCP `initialize`, `tools/list`, and read-only `customers_list` (`per_page=1`). No write operation was performed.
@@ -32,8 +32,9 @@ OAuth uses Authorization Code with PKCE. The upstream API key is passed to the r
 - PR #54 is merged. The scope-aware refresh-token correction is deployed in Auth Worker v8.
 - Provider-level refresh-token rotation and revocation semantics are covered by Auth tests. Actual ChatGPT/client disconnect behavior remains unverified.
 - User-facing disconnect and credential-replacement management are not implemented. Reauthorization creates a separate grant; it does not automatically replace a previous key.
-- The successful two-key smoke is historical read-only evidence. It does not authorize further real-key testing. Further tests remain **NO-GO** until gates 1–5 in the [implementation plan](docs/implementation-plan.md) are formally closed and reviewed.
-- Production write-operation tests against real workspaces are prohibited.
+- The two-key read-only smoke is historical evidence. On 2026-11-21, the operator authorized controlled real-key MCP testing against the designated test workspace, including a temporary item create/update/get/delete lifecycle through MCP only.
+- The controlled test runner reads `KEY_1`, `KEY_2`, and `KEY_3` from the server-local `.env`, never prints credential values or customer records, and revokes each temporary OAuth grant after its test. It deletes only the item it created; existing records are out of scope.
+- This testing GO does not mean the product is fully release-ready. Client-side disconnect behavior and user-facing credential replacement remain open.
 
 The [production migration runbook](docs/production-migration.md) is the single source of truth for deployed versions, deployment IDs, probes, rollback references, and execution history.
 
