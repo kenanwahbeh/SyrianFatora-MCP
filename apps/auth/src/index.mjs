@@ -33,6 +33,21 @@ const authorizationServer = new OAuthAuthorizationServer({
   },
 });
 
+function consentCookieHeaders(headers) {
+  // Some OAuth launchers use isolated/opaque browser contexts. Keep the
+  // transaction cookie available to the same authorization tab while using
+  // CHIPS partitioning; the provider still verifies its one-time handle and
+  // the exact browser-bound cookie value before consuming the transaction.
+  const cookie = headers.get("Set-Cookie");
+  if (cookie) {
+    headers.set(
+      "Set-Cookie",
+      cookie.replace(/;\s*SameSite=Lax(?=;|$)/i, "; SameSite=None; Partitioned"),
+    );
+  }
+  return headers;
+}
+
 function securityHeaders(headers = new Headers()) {
   headers.set("Cache-Control", "no-store");
   headers.set("Pragma", "no-cache");
@@ -107,7 +122,7 @@ async function authorize(request, workerEnv) {
     const authRequest = await oauth.parseAuthRequest(request);
     const details = await oauth.describeConsent(authRequest);
     const consent = await oauth.beginConsent(authRequest);
-    const headers = securityHeaders(consent.headers);
+    const headers = consentCookieHeaders(securityHeaders(consent.headers));
     headers.set("Content-Type", "text/html; charset=utf-8");
     return new Response(authorizationPage(details, consent.handle), { headers });
   }
@@ -124,7 +139,7 @@ async function authorize(request, workerEnv) {
 
   if (form.get("decision") !== "approve") {
     const denied = await oauth.denyConsent(request, handle);
-    const headers = securityHeaders(denied.headers);
+    const headers = consentCookieHeaders(securityHeaders(denied.headers));
     return new Response(null, { status: 302, headers });
   }
 
@@ -145,7 +160,7 @@ async function authorize(request, workerEnv) {
     // Issue a fresh browser-bound handle so the user can correct the selection.
     const details = await oauth.describeConsent(consent.request);
     const retry = await oauth.beginConsent(consent.request);
-    const headers = securityHeaders(retry.headers);
+    const headers = consentCookieHeaders(securityHeaders(retry.headers));
     headers.set("Content-Type", "text/html; charset=utf-8");
     return new Response(authorizationPage(details, retry.handle, error.message), {
       status: error.status ?? 400,
@@ -176,7 +191,7 @@ async function authorize(request, workerEnv) {
         ? "Too many authorization attempts. Wait before trying again."
         : "Authorization is temporarily unavailable. Please try again later.")
       : error.message;
-    const headers = securityHeaders(retry.headers);
+    const headers = consentCookieHeaders(securityHeaders(retry.headers));
     headers.set("Content-Type", "text/html; charset=utf-8");
     if (error.retryAfterSeconds) headers.set("Retry-After", String(error.retryAfterSeconds));
     return new Response(authorizationPage(details, retry.handle, message), {
@@ -202,7 +217,7 @@ async function authorize(request, workerEnv) {
     },
   });
 
-  const headers = securityHeaders(approved.headers);
+  const headers = consentCookieHeaders(securityHeaders(approved.headers));
   headers.set("Location", redirectTo);
   return new Response(null, { status: 302, headers });
 }

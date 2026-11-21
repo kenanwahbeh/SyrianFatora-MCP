@@ -342,6 +342,10 @@ async function beginAuthorization(client, verifier, scope = "mcp:read") {
   const handle = html.match(/name="handle" value="([^"]+)"/)?.[1];
   assert.ok(handle, "consent handle must be present");
   const setCookie = response.headers.get("Set-Cookie") || "";
+  assert.match(setCookie, /; Secure(?:;|$)/i);
+  assert.match(setCookie, /; HttpOnly(?:;|$)/i);
+  assert.match(setCookie, /; SameSite=None(?:;|$)/i);
+  assert.match(setCookie, /; Partitioned(?:;|$)/i);
   const cookie = setCookie.split(";")[0];
   assert.ok(cookie, "browser-binding cookie must be present");
   return { handle, cookie };
@@ -378,6 +382,9 @@ async function approveAuthorization(handle, cookie, scopes = ["mcp:read"], apiKe
     302,
     `approval should redirect after successful validation; got ${response.status}: ${await response.clone().text()}`,
   );
+  const clearedCookie = response.headers.get("Set-Cookie") || "";
+  assert.match(clearedCookie, /; SameSite=None(?:;|$)/i);
+  assert.match(clearedCookie, /; Partitioned(?:;|$)/i);
   return response;
 }
 
