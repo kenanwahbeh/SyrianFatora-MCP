@@ -128,20 +128,34 @@ async function authorize(request, workerEnv) {
     return new Response(null, { status: 302, headers });
   }
 
-  // Validate the user's scope selection before consuming the one-time handle.
-  // Credential checks run only after the browser-bound transaction is verified;
-  // if they fail, a fresh bound handle is issued so the user can safely retry.
-  const selectedScopes = validateConsentScopes(
-    form.getAll("scope").map(String),
-    SUPPORTED_SCOPES,
-  );
-
-  // Consume and validate the browser-bound consent transaction before making
-  // any outbound request. A forged, expired, replayed, or cross-browser handle
-  // must never trigger upstream credential validation.
-  const approved = await oauth.approveConsent(request, handle, {
-    scope: selectedScopes,
-  });
+  // Validate the browser-bound transaction and recover the original OAuth request
+  // from server-side storage. Do not pass form scopes to approveConsent(): the
+  // provider intentionally permits any supported scope, including unrequested ones.
+  const consent = await oauth.approveConsent(request, handle);
+  let selectedScopes;
+  try {
+    selectedScopes = validateConsentScopes(
+      form.getAll("scope").map(String),
+      SUPPORTED_SCOPES,
+      consent.request.scope,
+    );
+  } catch (error) {
+    if (!(error instanceof CredentialValidationError)) throw error;
+    // The one-time handle was consumed while recovering the trusted request.
+    // Issue a fresh browser-bound handle so the user can correct the selection.
+    const details = await oauth.describeConsent(consent.request);
+    const retry = await oauth.beginConsent(consent.request);
+    const headers = securityHeaders(retry.headers);
+    headers.set("Content-Type", "text/html; charset=utf-8");
+    return new Response(authorizationPage(details, retry.handle, error.message), {
+      status: error.status ?? 400,
+      headers,
+    });
+  }
+  const approved = {
+    ...consent,
+    request: { ...consent.request, scope: selectedScopes },
+  };
 
   const apiKey = String(form.get("api_key") ?? "").trim();
   try {
