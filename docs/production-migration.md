@@ -23,18 +23,22 @@ The successful Build ran the dependency audit, Cloudflare build check and 53 MCP
 
 **Important:** deployment is verified, but an authenticated post-v16 MCP functional smoke has not yet been recorded. Do not describe v16 as end-to-end smoke-tested or fully release-ready.
 
-## Auth production baseline
+## Current Auth production deployment
 
-| Item | Last recorded value |
+| Item | Verified value |
 | --- | --- |
 | Worker | `syrianfatora-auth` |
 | Issuer | `https://syrianfatora-auth.kinan-api.workers.dev` |
-| Last documented version | v8 — `25c25a69-9fb2-4c75-b07b-a1cf00a49532` |
-| Last documented deployment | `4bd65dcd-240e-44f7-b2db-c025a0b51a05` |
+| Version | v12 |
+| Version ID | `cea33cf9-7b2f-48af-81c2-183f434cec3f` |
+| Deployment ID | `78068e28-2c1a-4b06-9a82-54739cda17e7` |
+| Traffic | 100% to v12 |
+| Previous version | v11 — `b0c0df89-1adc-4911-b689-753c45f9f35a` |
+| Previous deployment | `ca5bf43c-3e07-4eb2-b6ba-d6c477b02617` |
 | OAuth KV | `syrianfatora-oauth-production` — `d19d9bd755c349f688cd55e299b8168f` |
 | Durable Object namespace | `1303fb3e6d25453080035c0356b4d4bd` |
 
-These are the last recorded Auth values. The MCP v16 Build did not build or deploy Auth. Re-read Cloudflare before any Auth release or rollback.
+Cloudflare deployment/version records were read on 2026-11-21. The current Auth deployment is v12, not v8 or v11. The MCP v16 Build did not build or deploy Auth; Auth has its own independent release history. Both workers' production settings and bindings were inspected and matched the current source configuration. No production setting changes were needed in that inspection.
 
 ## MCP Build trigger
 
@@ -53,25 +57,76 @@ Cloudflare rejected version upload because the existing Worker had Script API de
 
 This was a one-time approved migration exception. Never put `--force` in the permanent trigger or use it as a routine deployment path.
 
-## Post-deployment smoke checklist
+## Production endpoint checks
 
-1. MCP `/health` returns HTTP 200 and `toolCount: 51`.
-2. Protected-resource metadata returns HTTP 200 and advertises the Auth issuer.
-3. A deliberately invalid Bearer token is rejected with HTTP 401.
-4. Auth OAuth discovery returns the expected issuer and endpoints.
-5. With an explicitly approved test credential, complete Authorization Code + PKCE.
-6. Authenticated MCP `initialize`, `notifications/initialized` and `tools/list` succeed.
-7. If separately authorized, run `customers_list` with `per_page=1`; do not print customer data.
+The two `/health` endpoints are intentionally public, read-only liveness checks:
 
-Record timestamp, exact version, status codes and sanitized results after testing. Never include credentials, tokens or customer records.
+- MCP: `GET https://syrianfatora-mcp.kinan-api.workers.dev/health` → expected HTTP 200 and JSON with `ok: true`, `service: "syrianfatora-mcp"`, `mode: "oauth-resource-server"`, and `toolCount: 51`.
+- Auth: `GET https://syrianfatora-auth.kinan-api.workers.dev/health` → expected HTTP 200 and JSON with `ok: true`, `service: "syrianfatora-auth"`, and `version: "0.1.0"`.
 
-A payment-void contract probe, only if separately authorized, must use a clearly nonexistent payment ID and `void_reason`. Expected behavior is that the request passes MCP schema validation and reaches REST, which returns not-found. Never void a real payment.
+These checks prove that the public Worker route responds; they do not prove OAuth token validation, the Service Binding, or upstream API connectivity.
+
+### Quick checks from Windows PowerShell
+
+Use `curl.exe` (not PowerShell's historical `curl` alias):
+
+```powershell
+curl.exe -i https://syrianfatora-mcp.kinan-api.workers.dev/health
+curl.exe -i https://syrianfatora-auth.kinan-api.workers.dev/health
+```
+
+For both, expect `HTTP/1.1 200` (or `HTTP/2 200`) and the JSON fields above. A non-200 response should be recorded with its status and sanitized response body; do not paste credentials or tokens.
+
+### MCP protocol check
+
+`/mcp` is not a browser health page. It is a JSON-RPC endpoint and its normal method is **POST**. A request without a Bearer token should be rejected with HTTP 401 and an OAuth `WWW-Authenticate` challenge; this is an expected authentication check, not a successful MCP session.
+
+From PowerShell, test the protected route without a token:
+
+```powershell
+$body = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"manual-smoke","version":"1.0"}}}'
+curl.exe -i -X POST "https://syrianfatora-mcp.kinan-api.workers.dev/mcp" `
+  -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
+  -H "MCP-Protocol-Version: 2025-03-26" `
+  --data-raw $body
+```
+
+Expected: HTTP 401 because no access token was supplied. Do not use `GET /mcp` as the MCP protocol test; a normal MCP exchange uses POST.
+
+### Full authenticated, read-only smoke
+
+The repository includes an operator-run Authorization Code + PKCE test. On a machine with Node.js 20+ and the repository cloned:
+
+```powershell
+cd apps/mcp
+npm ci
+npm run smoke:oauth
+```
+
+The script prints an authorization URL. Open it in a browser, verify the requesting client and redirect host, select only `mcp:read`, and enter the Workspace API key only on the official HTTPS Auth page. Never send the key or issued token in chat or terminal output. The script then checks:
+
+1. OAuth authorization and code exchange.
+2. Authenticated MCP `initialize`.
+3. `notifications/initialized`.
+4. Authenticated `tools/list` and exactly 51 tools.
+5. Read-only `customers_list` with `per_page=1`.
+
+This last step consumes SyrianFatora API quota and may return limited workspace data to the local test process; the script does not print customer records or credentials. Run it only with an explicitly approved test workspace/key. It does not create or modify business records and does not request `mcp:write`.
+
+### Evidence status as of 2026-11-21
+
+- Cloudflare API confirmed MCP v16 at 100% production traffic and Auth v12 at 100% production traffic.
+- MCP Build v16 completed the audit/build check and 53 MCP unit tests successfully.
+- Production settings and bindings for both Workers were inspected and matched source.
+- A live HTTP request from the connected execution environment could not be completed because outbound HTTP access was blocked before reaching the Workers. This is **not evidence of a Worker failure**.
+- No successful post-v16 authenticated MCP smoke is recorded yet. Complete the Windows checks above and append timestamp, status codes, MCP server version, tool count and sanitized outcome. Never include credentials, tokens or customer records.
 
 ## Rollback
 
 The immediately previous MCP version recorded before v16 is v15 (`5469a3d0-9b01-4803-ad00-4c6813df3e2c`), deployment `6d82978e-52cd-4442-a05c-cc9d8b595668`. Before rollback, inspect the current Cloudflare deployment list and confirm v15 remains available with expected bindings/configuration. Do not act on this historical note alone; explicit operator approval is required.
 
-The last documented Auth rollback target was v7 (`5f9fe79d-1799-4a66-8f25-868f149dcd7a`), deployment `d07905f9-b987-4946-88cf-8accd662c1d3`. Verify availability and bindings before any action.
+The immediately previous Auth version to current v12 is v11 (`b0c0df89-1adc-4911-b689-753c45f9f35a`), deployment `ca5bf43c-3e07-4eb2-b6ba-d6c477b02617`. Verify availability and bindings before any action; explicit operator approval is required.
 
 A source archive alone is not a complete rollback artifact. Verify Worker settings, bindings, secrets, KV/DO namespaces and deployment traffic independently.
 
