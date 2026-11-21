@@ -17,7 +17,7 @@ The production Cloudflare Worker `syrianfatora-mcp` already serves the public MC
 5. Preserve all 51 existing MCP tools and their API semantics.
 6. Use Authorization Code + PKCE, provider-managed KV state, and provider-encrypted grant properties for the SyrianFatora API key.
 7. Defer automated tests for the immediate production migration at the maintainer's direction. This is a recorded risk exception, not a passing test result.
-8. Never bypass the script API conflict with an unreviewed `--force`. Capture the live script and deployment metadata and retain a rollback path first.
+8. Never bypass the script API conflict with an unreviewed `--force`. Capture the live script and deployment metadata and retain a rollback path first. A one-time `cf deploy --prebuilt --mode production --force` migration was later explicitly approved by the operator on 2026-11-21, used for the successful MCP v16 deployment, and immediately removed from the permanent Build trigger. This exception does not authorize routine or automatic use of `--force`.
 
 ## Consequences
 
@@ -29,4 +29,4 @@ The production Cloudflare Worker `syrianfatora-mcp` already serves the public MC
 
 ## Follow-up implementation
 
-The initial migration's test deferral was temporary. Subsequent work added the Auth SQLite Durable Object concurrency tests and the full Auth/MCP CI gates. On `main`, Auth passes 43 tests and MCP passes 24 tests. Production health, OAuth discovery, protected-resource metadata, tool count, and invalid-token rejection were verified. The later operator-confirmed two-key production smoke completed OAuth and authenticated read-only MCP calls; PR #54 has since corrected optional refresh-token issuance and is deployed in Auth v8; client/ChatGPT-side disconnect behavior and user-facing disconnect/replacement UX remain outstanding.
+The initial migration's test deferral was temporary. Subsequent work added the Auth SQLite Durable Object concurrency tests and the full Auth/MCP CI gates. The last documented Auth suite passed 43 tests. The MCP v16 Cloudflare Build later passed 53 MCP tests. Production health, OAuth discovery, protected-resource metadata, tool count, and invalid-token rejection were verified. The later operator-confirmed two-key production smoke completed OAuth and authenticated read-only MCP calls; PR #54 has since corrected optional refresh-token issuance and is deployed in Auth v8; client/ChatGPT-side disconnect behavior and user-facing disconnect/replacement UX remain outstanding.
