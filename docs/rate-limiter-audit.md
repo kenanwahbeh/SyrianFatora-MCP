@@ -1,21 +1,18 @@
-# Rate-limiter audit — provider-owned workspace quota
+# Rate-limiter audit — provider-owned Workspace quota
 
-**Updated:** 2026-11-20
+**Updated:** 2026-11-21
 
-**Scope:** Auth authorization-attempt protection, MCP upstream requests, provider-directed cooldown behavior.
-**Intent:** SyrianFatora owns workspace quota. This integration must not create a competing local request quota.
+## Implemented behavior
 
-## Current behavior in source
-
-1. The Auth approval path applies IP-attempt and credential-fingerprint attempt protection before calling the read-only SyrianFatora API-key validation endpoint.
-2. These counters protect repeated authorization submissions only. They are not applied to normal MCP tool calls.
-3. The MCP Worker no longer charges a per-credential request bucket or a per-OAuth-grant bucket.
-4. The MCP Worker checks only whether a credential-scoped provider cooldown is active before forwarding an upstream request.
-5. A cooldown is recorded only after SyrianFatora returns HTTP 429 with a valid Retry-After header. The provider-specified duration is used; no local fallback is configured.
-6. If Retry-After is missing or invalid, no cooldown is created.
+1. The Auth approval path applies IP-attempt and credential-fingerprint attempt protection before validating a submitted Workspace API key.
+2. These counters protect authorization submissions only; they are not applied to normal MCP tool calls.
+3. The MCP Worker does not charge a per-credential or per-OAuth-grant request bucket.
+4. Before forwarding an upstream request, MCP checks whether a credential-scoped provider cooldown is active.
+5. A cooldown is recorded only after SyrianFatora returns HTTP 429 with a valid `Retry-After`.
+6. The cooldown uses the provider-specified duration. There is no local fallback duration.
 7. The handler does not automatically retry an upstream request.
-8. Provider X-RateLimit-Limit, X-RateLimit-Remaining, and Retry-After values are passed through in the MCP tool result when present.
-9. The HMAC API-key fingerprint is used for privacy-preserving authorization-attempt identity and provider-directed cooldown storage. It is not a workspace ID and is not used to meter normal API requests.
+8. Provider `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `Retry-After` values are preserved in MCP tool results when present.
+9. The HMAC credential fingerprint is used for privacy-preserving authorization protection and provider-directed cooldown storage. It is not a Workspace ID and is not used to meter API requests.
 10. The random OAuth grant subject is not used for quota accounting.
 
 ## Controls retained
@@ -24,33 +21,31 @@
 - Authorization credential-validation attempt window.
 - Provider-directed 429 cooldown state only.
 
-## Controls removed
+## Controls explicitly not implemented
 
 - Local per-credential MCP request quota.
 - Local per-OAuth-grant MCP request quota.
 - Local daily or monthly usage caps.
-- The local fallback cooldown duration.
-- Any requirement to discover or infer a stable workspace identifier for local quota aggregation.
+- Locally invented fallback cooldown duration.
+- Workspace identity inference for quota aggregation.
 
-## Configuration inventory
+## Configuration
 
-The remaining authorization-attempt settings are:
-- RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS
-- RATE_LIMIT_AUTH_IP_WINDOW_SECONDS
-- RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS
-- RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS
+Auth authorization-attempt settings:
 
-RATE_LIMIT_HMAC_SECRET remains required for privacy-preserving credential/IP identities. There are no RATE_LIMIT_CREDENTIAL_MAX_REQUESTS, RATE_LIMIT_CREDENTIAL_WINDOW_SECONDS, RATE_LIMIT_GRANT_MAX_REQUESTS, RATE_LIMIT_GRANT_WINDOW_SECONDS, or RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS settings.
+- `RATE_LIMIT_AUTH_IP_MAX_ATTEMPTS`
+- `RATE_LIMIT_AUTH_IP_WINDOW_SECONDS`
+- `RATE_LIMIT_AUTH_CREDENTIAL_MAX_ATTEMPTS`
+- `RATE_LIMIT_AUTH_CREDENTIAL_WINDOW_SECONDS`
 
-## Tests
+`RATE_LIMIT_HMAC_SECRET` is required for privacy-preserving credential/IP identities. The MCP source does not define local request-quota settings such as `RATE_LIMIT_CREDENTIAL_MAX_REQUESTS`, `RATE_LIMIT_GRANT_MAX_REQUESTS` or `RATE_LIMIT_UPSTREAM_429_COOLDOWN_SECONDS`.
 
-The source tests cover concurrent authorization-attempt protection in the SQLite Durable Object; credential-attempt protection without a second credential usage bucket; provider-directed cooldown behavior; MCP cooldown checks without grant fingerprints or local usage charges; missing secret/binding failure behavior; handler behavior when provider cooldown is active; and provider quota headers/upstream 429 handling.
+## Test and deployment evidence
 
-On `main`, the Auth suite passes 43 tests and the MCP suite passes 24 tests; the Cloudflare Build workflows run audit, build, and test gates. These source tests do not prove a real Workspace-key OAuth flow or authenticated MCP tool call; see the production migration log and the ordered release gates.
+The successful MCP v16 Cloudflare Build on 2026-11-21 ran 53 MCP tests after audit and build checks. Auth tests run in a separate package/workflow; the last documented Auth suite count is 43. Do not attribute the MCP Build result to Auth.
 
-## Production safety
+Cloudflare confirmed the production MCP `RATE_LIMITER` binding points to `CredentialRateLimiter` in `syrianfatora-auth`. The post-v16 authenticated MCP smoke remains outstanding.
 
-- The Auth and MCP Workers are deployed with the provider-owned quota model. Production binding/secret inventory and read-only endpoint checks are recorded in `docs/production-migration.md`.
-- The 2026-11-20 Auth v8 release includes the merged PR #54 lifecycle correction; the Auth suite passes 43 tests and the current `main` MCP suite passes 24. The rate-limiter behavior is source-tested and the production bindings are verified.
-- Do not introduce local per-key, per-grant, daily, or monthly request quotas. Production write-operation tests remain prohibited.
-- Never test write operations against a real customer workspace.
+## Safety
+
+Do not introduce local per-key, per-grant, daily or monthly request quotas. Do not store raw keys/IP addresses/grant subjects. Do not automatically retry or invent a cooldown when the provider has not supplied a valid `Retry-After`.
