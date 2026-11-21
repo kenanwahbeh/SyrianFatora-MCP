@@ -352,16 +352,6 @@ async function runWriteTest(label, apiKey, clientId, redirectUri) {
 }
 
 async function main() {
-  const envText = await readFile(ENV_PATH, "utf8");
-  const keys = parseEnv(envText);
-  for (const name of ["KEY_1", "KEY_2", "KEY_3"]) {
-    if (!keys.has(name)) throw new Error(`${name} is missing or empty in the local .env file`);
-  }
-
-  const callbackPort = Number(process.env.SMOKE_CALLBACK_PORT ?? 43127);
-  assert.ok(Number.isInteger(callbackPort) && callbackPort > 0 && callbackPort <= 65535);
-  const redirectUri = `http://127.0.0.1:${callbackPort}/callback`;
-  const clientId = await getClient(redirectUri);
   const args = process.argv.slice(2);
   let selectedKey;
   if (args.length) {
@@ -370,6 +360,18 @@ async function main() {
     }
     selectedKey = args[1];
   }
+
+  const envText = await readFile(ENV_PATH, "utf8");
+  const keys = parseEnv(envText);
+  const requiredKeys = selectedKey ? [selectedKey] : ["KEY_1", "KEY_2", "KEY_3"];
+  for (const name of requiredKeys) {
+    if (!keys.has(name)) throw new Error(`${name} is missing or empty in the local .env file`);
+  }
+
+  const callbackPort = Number(process.env.SMOKE_CALLBACK_PORT ?? 43127);
+  assert.ok(Number.isInteger(callbackPort) && callbackPort > 0 && callbackPort <= 65535);
+  const redirectUri = `http://127.0.0.1:${callbackPort}/callback`;
+  const clientId = await getClient(redirectUri);
 
   console.log("SyrianFatora live MCP test — credential values and customer data are never printed.");
   if (selectedKey) {
