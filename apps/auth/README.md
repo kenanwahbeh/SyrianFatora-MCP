@@ -24,7 +24,16 @@ Possession of the Workspace API key is used as the initial proof of workspace ac
 - Service Binding entrypoint: `SyrianFatoraAuth`
 - OAuth provider: `@cloudflare/workers-oauth-provider@1.2.4`
 
-Production version IDs, KV/DO namespace identifiers, and rollback references belong in the [production migration runbook](../../docs/production-migration.md). The latest documented Auth baseline is v8; the MCP v16 Build on 2026-11-21 was MCP-only and did not rebuild or redeploy Auth. Re-read Cloudflare before relying on that Auth version as current.
+Production baseline verified from Cloudflare on 2026-11-21:
+
+- Version: **v12**
+- Version ID: `cea33cf9-7b2f-48af-81c2-183f434cec3f`
+- Deployment ID: `78068e28-2c1a-4b06-9a82-54739cda17e7`
+- Traffic: 100% to v12
+- Previous version: v11 — `b0c0df89-1adc-4911-b689-753c45f9f35a`
+- Previous deployment: `ca5bf43c-3e07-4eb2-b6ba-d6c477b02617`
+
+The MCP v16 deployment is separate. Do not infer Auth version changes from MCP builds. The [production migration runbook](../../docs/production-migration.md) is the canonical deployment/rollback record.
 
 ## Authorization protections
 
@@ -44,7 +53,7 @@ Requirements: Node.js 20 or later and the package dependencies.
 From this directory:
 
 ```sh
-npm install
+npm ci
 npm run build:check
 npm test
 npm run dev
@@ -62,7 +71,7 @@ The production deployment command is managed by the Cloudflare Build trigger. Do
 
 ## Token lifecycle
 
-PR #54 is merged. Auth Worker v8 includes a token-exchange callback that issues refresh tokens only when `offline_access` is in the effective requested scope. The Auth test suite covers the no-refresh case, refresh-token rotation, grant isolation, access-token revocation, and full grant revocation through refresh-token revocation.
+PR #54 introduced the token-exchange callback, present in the current Auth source and production baseline: refresh tokens are issued only when `offline_access` is in the effective requested scope. The Auth test suite covers the no-refresh case, refresh-token rotation, grant isolation, access-token revocation, and full grant revocation through refresh-token revocation.
 
 Revoking an access token removes that token but does not itself delete the grant or encrypted key. Revoking a refresh token revokes the grant and its encrypted properties.
 
@@ -70,4 +79,4 @@ Revoking an access token removes that token but does not itself delete the grant
 
 Provider-level token lifecycle behavior is implemented and source-tested. Actual ChatGPT/client disconnect behavior is not verified. A user-facing disconnect or credential-replacement management page is not implemented. Reauthorizing creates an independent grant; it does not automatically replace or revoke an earlier grant because no stable Workspace identifier is available.
 
-A read-only production OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). On 2026-11-21, the operator authorized controlled live MCP testing against the designated test workspace, including scoped write tests through MCP. The test runner revokes its temporary OAuth grants after each run. This authorization is limited to controlled integration testing and is not a full release-readiness sign-off. See the [implementation plan](../../docs/implementation-plan.md), [credential lifecycle review](../../docs/credential-lifecycle-review.md), and [production runbook](../../docs/production-migration.md).
+A read-only production OAuth smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`) in earlier testing. The MCP v16 deployment on 2026-11-21 has not yet had a successful authenticated post-deployment functional smoke recorded. The current Auth v12 baseline must not be described as having passed a fresh live OAuth smoke solely because its version and deployment are visible in Cloudflare. See the [implementation plan](../../docs/implementation-plan.md), [credential lifecycle review](../../docs/credential-lifecycle-review.md), and [production runbook](../../docs/production-migration.md).
