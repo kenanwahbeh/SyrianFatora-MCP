@@ -24,7 +24,7 @@ OAuth uses Authorization Code with PKCE. The upstream API key is passed to the r
 - Production health, OAuth discovery, protected-resource metadata, and invalid-token rejection (HTTP 401) passed.
 - An operator-confirmed production Authorization Code + PKCE smoke succeeded with two real Workspace keys (`KEY_1` and `KEY_2`). Both sessions approved `mcp:read` and completed authenticated MCP `initialize`, `tools/list`, and read-only `customers_list` (`per_page=1`). No write operation was performed.
 - Main-branch test suites: Auth 43 tests and MCP 24 tests. The Auth suite includes optional `offline_access`, refresh-token rotation, grant isolation, and revocation coverage. Dependency audits report zero high-severity vulnerabilities.
-- Both production Build triggers target `main`. Auth retains its existing deploy workflow; MCP now uploads a Worker Version only (`cf workers versions create`) and requires a separately approved promotion to production.
+- Both production Build triggers target `main`. Auth retains its existing deploy workflow. The MCP trigger still has its previous deploy command until PR #58 is merged and the Cloudflare Build setting is updated; the intended replacement uploads a Worker Version only, with production promotion kept separate and explicit.
 - Production Preview metadata cleanup is deployed. The isolated Preview Worker remains available.
 
 **Open release work**
