@@ -100,7 +100,13 @@ async function registerClient() {
 }
 
 function cookieFrom(response) {
-  const cookie = (response.headers.get("Set-Cookie") || "").split(";")[0];
+  const setCookie = response.headers.get("Set-Cookie") || "";
+  assert.match(setCookie, /; Secure(?:;|$)/i);
+  assert.match(setCookie, /; HttpOnly(?:;|$)/i);
+  assert.match(setCookie, /; SameSite=None(?:;|$)/i);
+  assert.match(setCookie, /; Partitioned(?:;|$)/i);
+  assert.match(setCookie, /; Path=\//i);
+  const cookie = setCookie.split(";")[0];
   assert.ok(cookie, "consent response must set its browser-binding cookie");
   return cookie;
 }
@@ -133,6 +139,15 @@ test("consent rejects a supported scope that was not requested and reissues a sa
   });
   escalatedBody.append("scope", "mcp:read");
   escalatedBody.append("scope", "mcp:write");
+
+  const unbound = await request("/authorize", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: escalatedBody,
+  });
+  assert.equal(unbound.status, 400);
+  assert.match(await unbound.text(), /not started in this browser/);
+
   const escalated = await request("/authorize", {
     method: "POST",
     headers: {
