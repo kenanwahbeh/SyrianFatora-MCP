@@ -1,6 +1,6 @@
 # AGENT.md — Repository operating instructions
 
-These instructions apply to all automated coding agents and contributors working in this repository.
+These instructions apply to all automated coding agents and contributors working in this repository. The specialized GitHub agent profile at `.github/agents/syrianfatora-guardian.agent.md` must follow these rules and the same source-of-truth policy.
 
 ## 1. Source of truth
 
