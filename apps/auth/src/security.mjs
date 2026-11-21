@@ -26,8 +26,8 @@ export function renderConsentScopes(scopes, requiredScopes = ["mcp:read"]) {
   }).join("<br>");
 }
 
-export function validateConsentScopes(scopes, allowedScopes, requiredScopes = ["mcp:read"]) {
-  if (!Array.isArray(scopes) || !Array.isArray(allowedScopes) || !Array.isArray(requiredScopes)) {
+export function validateConsentScopes(scopes, allowedScopes, requestedScopes, requiredScopes = ["mcp:read"]) {
+  if (!Array.isArray(scopes) || !Array.isArray(allowedScopes) || !Array.isArray(requestedScopes) || !Array.isArray(requiredScopes)) {
     throw new TypeError("Scope lists must be arrays.");
   }
 
@@ -36,6 +36,14 @@ export function validateConsentScopes(scopes, allowedScopes, requiredScopes = ["
     throw new CredentialValidationError(
       "invalid_scope",
       "One or more selected permissions are not supported.",
+      400,
+    );
+  }
+
+  if (selected.some((scope) => !requestedScopes.includes(scope))) {
+    throw new CredentialValidationError(
+      "scope_not_requested",
+      "One or more selected permissions were not requested by this application. Review the requested permissions and try again.",
       400,
     );
   }
