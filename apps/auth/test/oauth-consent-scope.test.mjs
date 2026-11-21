@@ -126,18 +126,20 @@ test("consent rejects a supported scope that was not requested and reissues a sa
   assert.ok(handle);
   const browserCookie = cookieFrom(page);
 
+  const escalatedBody = new URLSearchParams({
+    handle,
+    decision: "approve",
+    api_key: API_KEY,
+  });
+  escalatedBody.append("scope", "mcp:read");
+  escalatedBody.append("scope", "mcp:write");
   const escalated = await request("/authorize", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       Cookie: browserCookie,
     },
-    body: new URLSearchParams({
-      handle,
-      decision: "approve",
-      api_key: API_KEY,
-      scope: "mcp:read mcp:write",
-    }),
+    body: escalatedBody,
   });
 
   assert.equal(escalated.status, 400);
