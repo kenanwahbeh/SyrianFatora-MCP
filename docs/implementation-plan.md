@@ -25,7 +25,7 @@ The current source on `main` contains the OAuth-protected MCP resource server an
 
 The Build log confirmed the MCP upload, Worker deployment, 6 ms startup time, and the `AUTH_SERVER` and `RATE_LIMITER` bindings. A successful Build/deployment is not evidence that authenticated MCP operations have passed after v16.
 
-The Auth Worker was last documented as v8 in the earlier production record. The v16 Build was MCP-only and did not rebuild or redeploy Auth. Consult the production runbook before relying on Auth version metadata.
+The canonical production runbook records Auth Worker v12 at 100% traffic, verified from Cloudflare on 2026-11-21. The MCP v16 Build was MCP-only and did not rebuild or redeploy Auth. The runbook is the sole source of truth for live version and deployment metadata.
 
 ## Implemented capabilities
 
