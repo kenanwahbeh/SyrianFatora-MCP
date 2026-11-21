@@ -145,10 +145,10 @@ Historical note: the 2026-11-18 failed build also encountered a Worker-name mism
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/mcp`
 - Build: `npm audit --audit-level=high && npm run build:check && node --test`
-- Current deploy setting (read 2026-11-21): `npx cf deploy --prebuilt --mode production` (aborts on Script API provenance conflict). Planned after PR #58 merge: `npm run deploy:version` → `cf workers versions create --prebuilt --mode production` (uploads a version only; does not promote production).
+- Current deploy setting (read back after update on 2026-11-21): `npx cf workers versions create --prebuilt --mode production` (uploads a version only; does not promote production). Equivalent package script: `npm run deploy:version`.
 - Paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
 
-Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production builds. Auth retains its existing deployment workflow. The MCP trigger setting has not yet been changed; after PR #58 is merged, update it to `npm run deploy:version` and read it back. Only then will MCP builds upload versions without promoting production. No standing `--force` override is permitted.
+Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production builds. Auth retains its existing deployment workflow. The MCP trigger now uploads Worker Versions only; production promotion is a separate, explicitly approved release action. The MCP deploy setting was read back and verified after the change. No standing `--force` override is permitted.
 
 ## Execution log
 
@@ -411,7 +411,9 @@ The Cloudflare deployment inspection confirms version assignment and traffic per
 ## MCP version-upload workflow update — 2026-11-21
 
 - Updated `apps/mcp/package.json` with `deploy:version`: `cf workers versions create --prebuilt --mode production`.
-- The MCP Build trigger is intended to use `npm run deploy:version` after this change is merged. The command uploads a version only; it does not promote it to production.
-- This source/documentation change does not upload a Worker Version, promote a deployment, change bindings/secrets, or alter production traffic.
-- Next operational step after merge: update the MCP Build trigger deploy command to `npm run deploy:version`, read it back to verify, then let a normal main-branch build create a version. Do not retry the failed `cf deploy` command and do not use `--force`.
+- The MCP Build trigger was changed to `npx cf workers versions create --prebuilt --mode production` and read back successfully. The equivalent package script is `npm run deploy:version`.
+- Updating the Build trigger did not upload a Worker Version, promote a deployment, change bindings/secrets, or alter production traffic.
+- The next normal main-branch build will create a Worker Version only. Do not retry the failed `cf deploy` command and do not use `--force`.
 - Promotion remains manual and requires a separate release decision. Verify the candidate version's bindings, then promote and perform read-only health/OAuth/MCP checks.
+
+- Cloudflare MCP Build trigger `593221cf-b17a-4506-979a-ebb7f4307c69` deploy command changed from `npx cf deploy --prebuilt --mode production` to `npx cf workers versions create --prebuilt --mode production`; GET read-back confirmed the new value. No build retry or Worker upload was performed as part of this setting change.
