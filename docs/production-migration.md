@@ -145,10 +145,10 @@ Historical note: the 2026-11-18 failed build also encountered a Worker-name mism
 - Repository/branch: `kenanwahbeh/SyrianFatora-MCP`, `main`
 - Root: `/apps/mcp`
 - Build: `npm audit --audit-level=high && npm run build:check && node --test`
-- Deploy: `npm run deploy:version` → `cf workers versions create --prebuilt --mode production` (uploads a version only; does not promote production)
+- Current deploy setting (read 2026-11-21): `npx cf deploy --prebuilt --mode production` (aborts on Script API provenance conflict). Planned after PR #58 merge: `npm run deploy:version` → `cf workers versions create --prebuilt --mode production` (uploads a version only; does not promote production).
 - Paths: `apps/mcp/**`, `apps/mcp/package.json`, `apps/mcp/package-lock.json`
 
-Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production builds. Auth retains its existing deployment workflow. MCP uploads versions only; production promotion is a separate, explicitly approved release action. No standing `--force` override is permitted.
+Both triggers target `main`, are path-scoped to their respective app directories/package manifests, and have automatic builds enabled. Documentation-only changes do not start production builds. Auth retains its existing deployment workflow. The MCP trigger setting has not yet been changed; after PR #58 is merged, update it to `npm run deploy:version` and read it back. Only then will MCP builds upload versions without promoting production. No standing `--force` override is permitted.
 
 ## Execution log
 
