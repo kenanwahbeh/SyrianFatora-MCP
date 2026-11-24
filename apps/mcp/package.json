@@ -18,7 +18,7 @@
     "@cloudflare/workers-oauth-provider": "1.2.4"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^2.0.0-rc.1",
+    "@cloudflare/vite-plugin": "^2.0.0-rc.3",
     "cf": "^1.0.0-rc.1",
     "vite": "^8.3.8"
   }
